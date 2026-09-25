@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import datetime
 import os
 
@@ -30,8 +31,6 @@ WELCOME_CHANNEL_ID = 863844473851215893
 STAFF_ROLE_1_ID = 995343531482812488
 STAFF_ROLE_2_ID = 863850042123878421
 
-# ئەگەر کەناڵی بەخێرهاتنت ئەمە نییە، ID ـەکە بگۆڕە.
-
 
 # =========================================================
 # 3. READY
@@ -39,12 +38,148 @@ STAFF_ROLE_2_ID = 863850042123878421
 
 @bot.event
 async def on_ready():
+
     print(f"بۆتەکە بە سەرکەوتوویی چالاک بوو وەک: {bot.user}")
     print(f"Bot ID: {bot.user.id}")
 
+    try:
+        synced = await bot.tree.sync()
+        print(f"Slash Commands synced: {len(synced)}")
+    except Exception as e:
+        print(f"Slash sync error: {e}")
+
 
 # =========================================================
-# 4. WELCOME
+# 4. STAFF SLASH COMMAND
+# =========================================================
+
+@bot.tree.command(
+    name="staff",
+    description="Give both Staff roles to a member."
+)
+@app_commands.describe(
+    member="ئەو کەسەی دەتەوێت ببێتە Staff"
+)
+async def staff_command(
+    interaction: discord.Interaction,
+    member: discord.Member
+):
+
+    # ADMIN ONLY
+
+    if not interaction.user.guild_permissions.administrator:
+
+        await interaction.response.send_message(
+            "❌ تەنها ئەدمین دەتوانێت Staff بەکاربهێنێت.",
+            ephemeral=True
+        )
+
+        return
+
+
+    # GET ROLES
+
+    role_1 = interaction.guild.get_role(
+        STAFF_ROLE_1_ID
+    )
+
+    role_2 = interaction.guild.get_role(
+        STAFF_ROLE_2_ID
+    )
+
+
+    # CHECK ROLES
+
+    if role_1 is None or role_2 is None:
+
+        await interaction.response.send_message(
+            "❌ یەکێک لە ڕۆڵەکانی Staff نەدۆزرایەوە.",
+            ephemeral=True
+        )
+
+        return
+
+
+    # BOT HIERARCHY CHECK
+
+    bot_member = interaction.guild.me
+
+    if bot_member is None:
+
+        await interaction.response.send_message(
+            "❌ بۆتەکە لە سێرڤەرەکە نەدۆزرایەوە.",
+            ephemeral=True
+        )
+
+        return
+
+
+    if role_1 >= bot_member.top_role or role_2 >= bot_member.top_role:
+
+        await interaction.response.send_message(
+            "❌ ڕۆڵەکانی Staff دەبێت لە خوار ڕۆڵی بۆتەکە بن.",
+            ephemeral=True
+        )
+
+        return
+
+
+    try:
+
+        # ADD BOTH STAFF ROLES
+
+        await member.add_roles(
+            role_1,
+            role_2,
+            reason=f"Karezma Staff by {interaction.user}"
+        )
+
+
+        # REQUIRED MESSAGE
+
+        await interaction.response.send_message(
+            f"bw ba staf {member.mention}"
+        )
+
+
+    except discord.Forbidden:
+
+        if not interaction.response.is_done():
+
+            await interaction.response.send_message(
+                "❌ بۆتەکە دەسەڵاتی زیادکردنی ڕۆڵی Staff ـی نییە.",
+                ephemeral=True
+            )
+
+        else:
+
+            await interaction.followup.send(
+                "❌ بۆتەکە دەسەڵاتی زیادکردنی ڕۆڵی Staff ـی نییە.",
+                ephemeral=True
+            )
+
+
+    except Exception as e:
+
+        print(f"Staff error: {e}")
+
+        if not interaction.response.is_done():
+
+            await interaction.response.send_message(
+                "❌ کێشەیەک لە Staff ڕوویدا.",
+                ephemeral=True
+            )
+
+        else:
+
+            await interaction.followup.send(
+                "❌ کێشەیەک لە Staff ڕوویدا.",
+                ephemeral=True
+            )
+
+
+# =========================================================
+# 5. WELCOME
 # =========================================================
 
 @bot.event
@@ -67,6 +202,7 @@ async def on_member_join(member):
         )
 
         # وێنەی پرۆفایلی ئەو کەسە لای ڕاست
+
         embed.set_thumbnail(
             url=member.display_avatar.url
         )
@@ -87,7 +223,7 @@ async def on_member_join(member):
 
 
 # =========================================================
-# 5. GET TARGET FROM TAG OR REPLY
+# 6. GET TARGET FROM TAG OR REPLY
 # =========================================================
 
 async def get_target_member(message):
@@ -97,6 +233,7 @@ async def get_target_member(message):
     # -------------------------
 
     if message.mentions:
+
         member = message.mentions[0]
 
         if isinstance(member, discord.Member):
@@ -115,8 +252,13 @@ async def get_target_member(message):
                 message.reference.message_id
             )
 
-            if isinstance(referenced_message.author, discord.Member):
+            if isinstance(
+                referenced_message.author,
+                discord.Member
+            ):
+
                 return referenced_message.author
+
 
             member = message.guild.get_member(
                 referenced_message.author.id
@@ -135,7 +277,7 @@ async def get_target_member(message):
 
 
 # =========================================================
-# 6. MUTED ROLE
+# 7. MUTED ROLE
 # =========================================================
 
 async def apply_muted_permissions(channel, mute_role):
@@ -215,7 +357,7 @@ async def get_or_create_muted_role(guild):
 
 
 # =========================================================
-# 7. NEW CHANNEL -> MUTED ROLE PERMISSION
+# 8. NEW CHANNEL -> MUTED ROLE PERMISSION
 # =========================================================
 
 @bot.event
@@ -243,7 +385,7 @@ async def on_guild_channel_create(channel):
 
 
 # =========================================================
-# 8. MAIN COMMAND SYSTEM
+# 9. MAIN COMMAND SYSTEM
 # =========================================================
 
 @bot.event
@@ -268,115 +410,10 @@ async def on_message(message):
 
 
     # =====================================================
-    # STAFF
-    # =====================================================
-
-    if command == "staff":
-
-        # ADMIN ONLY
-
-        if not message.author.guild_permissions.administrator:
-
-            await message.channel.send(
-                f"❌ {message.author.mention} تەنها ئەدمین دەتوانێت Staff بەکاربهێنێت.",
-                delete_after=5
-            )
-
-            return
-
-
-        target = await get_target_member(message)
-
-
-        if target is None:
-
-            await message.channel.send(
-                "❌ کەسەکە Tag بکە یان Reply ـی بکە و بنووسە `Staff`.",
-                delete_after=5
-            )
-
-            return
-
-
-        # GET STAFF ROLES
-
-        staff_role_1 = message.guild.get_role(
-            STAFF_ROLE_1_ID
-        )
-
-        staff_role_2 = message.guild.get_role(
-            STAFF_ROLE_2_ID
-        )
-
-
-        if staff_role_1 is None or staff_role_2 is None:
-
-            await message.channel.send(
-                "❌ یەکێک لە ڕۆڵەکانی Staff نەدۆزرایەوە.",
-                delete_after=5
-            )
-
-            return
-
-
-        try:
-
-            # ADD BOTH STAFF ROLES
-
-            await target.add_roles(
-                staff_role_1,
-                staff_role_2,
-                reason=f"Karezma Staff by {message.author}"
-            )
-
-
-            # DELETE COMMAND
-
-            try:
-
-                await message.delete()
-
-            except:
-
-                pass
-
-
-            # REQUIRED MESSAGE
-
-            await message.channel.send(
-                f"bw ba staf {target.mention}",
-                delete_after=2
-            )
-
-
-        except discord.Forbidden:
-
-            await message.channel.send(
-                "❌ بۆتەکە دەسەڵاتی زیادکردنی ڕۆڵی Staff ـی نییە.",
-                delete_after=5
-            )
-
-
-        except Exception as e:
-
-            print(f"Staff error: {e}")
-
-            await message.channel.send(
-                "❌ کێشەیەک لە Staff ڕوویدا.",
-                delete_after=5
-            )
-
-
-        return
-
-
-    # =====================================================
     # SAFIKA
     # =====================================================
 
     if command == "safika":
-
-        # ADMIN ONLY
 
         if not message.author.guild_permissions.administrator:
 
@@ -387,8 +424,6 @@ async def on_message(message):
 
             return
 
-
-        # AMOUNT
 
         if len(parts) < 2 or not parts[1].isdigit():
 
@@ -413,22 +448,17 @@ async def on_message(message):
             return
 
 
-        # MAX 1000
-
         amount = min(amount, 1000)
 
 
         try:
-
-            # ئەمەش کۆماندەکەی خۆی دەسڕێتەوە
 
             deleted = await message.channel.purge(
                 limit=amount + 1,
                 bulk=True
             )
 
-
-            result = await message.channel.send(
+            await message.channel.send(
                 f"✅ `{len(deleted)}` نامە سڕایەوە.",
                 delete_after=3
             )
@@ -461,8 +491,6 @@ async def on_message(message):
 
     if command == "mute":
 
-        # ADMIN ONLY
-
         if not message.author.guild_permissions.administrator:
 
             await message.channel.send(
@@ -485,8 +513,6 @@ async def on_message(message):
 
             return
 
-
-        # BOT HIERARCHY
 
         if target.id == bot.user.id:
 
@@ -515,8 +541,6 @@ async def on_message(message):
             )
 
 
-            # BOT MUST MANAGE MUTED ROLE
-
             if mute_role >= message.guild.me.top_role:
 
                 await message.channel.send(
@@ -527,8 +551,6 @@ async def on_message(message):
                 return
 
 
-            # ADD ROLE
-
             if mute_role not in target.roles:
 
                 await target.add_roles(
@@ -536,8 +558,6 @@ async def on_message(message):
                     reason=f"Karezma Mute by {message.author}"
                 )
 
-
-            # DELETE COMMAND
 
             try:
 
@@ -547,8 +567,6 @@ async def on_message(message):
 
                 pass
 
-
-            # REQUIRED MESSAGE
 
             await message.channel.send(
                 f"damt daxaa {target.mention}",
@@ -582,8 +600,6 @@ async def on_message(message):
     # =====================================================
 
     if command == "unmute":
-
-        # ADMIN ONLY
 
         if not message.author.guild_permissions.administrator:
 
@@ -643,8 +659,6 @@ async def on_message(message):
                 pass
 
 
-            # REQUIRED MESSAGE
-
             await message.channel.send(
                 f"xwa xerm bnwse dllm basha aqllba amjara {target.mention}",
                 delete_after=2
@@ -677,8 +691,6 @@ async def on_message(message):
     # =====================================================
 
     if command == "bfra":
-
-        # ADMIN ONLY
 
         if not message.author.guild_permissions.administrator:
 
@@ -739,8 +751,6 @@ async def on_message(message):
                 pass
 
 
-            # REQUIRED MESSAGE
-
             await message.channel.send(
                 f"✈️ Frenra {target.mention}",
                 delete_after=2
@@ -774,8 +784,6 @@ async def on_message(message):
 
     if command == "unban":
 
-        # ADMIN ONLY
-
         if not message.author.guild_permissions.administrator:
 
             await message.channel.send(
@@ -789,10 +797,6 @@ async def on_message(message):
         user = None
 
 
-        # -------------------------
-        # ID
-        # -------------------------
-
         if len(parts) >= 2 and parts[1].isdigit():
 
             try:
@@ -805,10 +809,6 @@ async def on_message(message):
 
                 user = None
 
-
-        # -------------------------
-        # REPLY
-        # -------------------------
 
         elif message.reference:
 
@@ -893,9 +893,6 @@ async def on_message(message):
 
     if command == "lock":
 
-        # ORIGINAL PERMISSION:
-        # MANAGE CHANNELS
-
         if not message.author.guild_permissions.manage_channels:
 
             await message.channel.send(
@@ -952,9 +949,6 @@ async def on_message(message):
 
     if command == "unlock":
 
-        # ORIGINAL PERMISSION:
-        # MANAGE CHANNELS
-
         if not message.author.guild_permissions.manage_channels:
 
             await message.channel.send(
@@ -1006,7 +1000,7 @@ async def on_message(message):
 
 
 # =========================================================
-# 9. ERROR HANDLER
+# 10. ERROR HANDLER
 # =========================================================
 
 @bot.event
@@ -1027,7 +1021,7 @@ async def on_command_error(ctx, error):
 
 
 # =========================================================
-# 10. RUN BOT
+# 11. RUN BOT
 # =========================================================
 
 TOKEN = os.getenv("DISCORD_TOKEN")
