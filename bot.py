@@ -39,11 +39,6 @@ LOG_CHANNELS = {
     "nickname": 867085807445213215,
 }
 
-# لێرەدا ئایدی ئەو کەناڵانە دابنە کە دەتەوێت کاتێک میوت دەکرێت چاتیان لێ بگرێت
-LOCKED_CHANNELS_IDS = [
-    # 863857498719780874,  # نموونەی ئایدی کەناڵ
-]
-
 
 # ============================================================
 # WELCOME IMAGE SETTINGS
@@ -77,7 +72,6 @@ intents.message_content = True
 intents.voice_states = True
 
 
-# بێ پێشگر کار دەکات
 bot = commands.Bot(
     command_prefix="",
     intents=intents
@@ -617,7 +611,7 @@ async def test(
 
 
 # ============================================================
-# PREFIX-LESS MODERATION COMMANDS (clear, mute, unmute, ban, unban, lock, unlock)
+# PREFIX-LESS MODERATION COMMANDS
 # ============================================================
 
 @bot.command(name="clear")
@@ -660,14 +654,11 @@ async def mute(ctx, member: discord.Member = None):
 
     if mute_role:
         try:
-            # قەدەغەکردنی نوسین لەو کەناڵانەی کە ئایدییەکانیان لە ليستدا دراون
-            for channel_id in LOCKED_CHANNELS_IDS:
-                channel = ctx.guild.get_channel(channel_id)
-                if channel:
-                    await channel.set_permissions(mute_role, send_messages=False, add_reactions=False)
+            for channel in ctx.guild.text_channels:
+                await channel.set_permissions(mute_role, send_messages=False, add_reactions=False)
 
             await member.add_roles(mute_role)
-            msg = await ctx.send(f"🔇 {member.mention} میوت کرا.")
+            msg = await ctx.send(f"🔇 {member.mention} میوت کرا و چات لە هەموو کەناڵەکان لێی قەدەغە کرا.")
             await msg.delete(delay=4)
         except Exception:
             pass
@@ -777,7 +768,7 @@ async def unban(ctx, user_id: int):
 
 
 # ============================================================
-# LOG EVENTS (Messages, Roles, Channels, Voice, Server, Bans)
+# LOG EVENTS
 # ============================================================
 
 @bot.event
