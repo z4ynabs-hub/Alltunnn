@@ -91,7 +91,8 @@ def current_time():
 def create_log_embed(
     title,
     description,
-    color=0x5865F2
+    color=0x5865F2,
+    thumbnail_url=None
 ):
     embed = discord.Embed(
         title=title,
@@ -99,6 +100,9 @@ def create_log_embed(
         color=color,
         timestamp=datetime.now(timezone.utc)
     )
+
+    if thumbnail_url:
+        embed.set_thumbnail(url=thumbnail_url)
 
     embed.set_footer(
         text="Karezma Logs"
@@ -472,11 +476,8 @@ async def on_member_join(
         f"**Username:** `{member}`\n"
         f"**ID:** `{member.id}`\n"
         f"**Time:** `{current_time()}`",
-        0x57F287
-    )
-
-    embed.set_thumbnail(
-        url=member.display_avatar.url
+        0x57F287,
+        member.display_avatar.url
     )
 
     await send_log(
@@ -495,11 +496,8 @@ async def on_member_remove(
         f"**Member:** `{member}`\n"
         f"**ID:** `{member.id}`\n"
         f"**Time:** `{current_time()}`",
-        0xED4245
-    )
-
-    embed.set_thumbnail(
-        url=member.display_avatar.url
+        0xED4245,
+        member.display_avatar.url
     )
 
     await send_log(
@@ -577,7 +575,8 @@ async def staf(
             f"**Admin:** {interaction.user.mention}\n"
             f"**Member:** {name.mention}\n"
             f"**Roles:** {role1.mention}, {role2.mention}",
-            0x5865F2
+            0x5865F2,
+            name.display_avatar.url
         )
 
         await send_log(
@@ -795,7 +794,8 @@ async def on_message_delete(
         f"**Author:** {message.author.mention}\n"
         f"**Channel:** {message.channel.mention}\n"
         f"**Content:** `{content}`",
-        0xED4245
+        0xED4245,
+        message.author.display_avatar.url
     )
 
     await send_log(
@@ -837,7 +837,8 @@ async def on_message_edit(
         f"**Channel:** {before.channel.mention}\n\n"
         f"**Before:** `{old}`\n"
         f"**After:** `{new}`",
-        0xFEE75C
+        0xFEE75C,
+        before.author.display_avatar.url
     )
 
     await send_log(
@@ -1030,7 +1031,8 @@ async def on_member_update(
             f"**Member:** {after.mention}\n"
             f"**Before:** `{old}`\n"
             f"**After:** `{new}`",
-            0xFEE75C
+            0xFEE75C,
+            after.display_avatar.url
         )
 
         await send_log(
@@ -1055,9 +1057,22 @@ async def on_member_update(
     ]
 
     if added or removed:
+        # دۆزینەوەی ئەو کەسەی کە گۆڕانکاری لە ڕۆڵەکاندا کردووە (Audit Logs)
+        updater = None
+        try:
+            async for entry in after.guild.audit_logs(limit=3, action=discord.AuditLogAction.member_role_update):
+                if entry.target.id == after.id:
+                    updater = entry.user
+                    break
+        except Exception:
+            pass
+
         lines = [
             f"**Member:** {after.mention}"
         ]
+        
+        if updater:
+            lines.append(f"**By:** {updater.mention}")
 
         if added:
             lines.append(
@@ -1080,7 +1095,8 @@ async def on_member_update(
         embed = create_log_embed(
             "Member Roles Updated",
             "\n".join(lines),
-            0x5865F2
+            0x5865F2,
+            after.display_avatar.url
         )
 
         await send_log(
@@ -1117,7 +1133,8 @@ async def on_voice_state_update(
                 "Voice State Changed",
                 f"**Member:** {member.mention}\n"
                 + "\n".join(changes),
-                0xFEE75C
+                0xFEE75C,
+                member.display_avatar.url
             )
 
             await send_log(
@@ -1156,7 +1173,8 @@ async def on_voice_state_update(
     embed = create_log_embed(
         title,
         description,
-        0x5865F2
+        0x5865F2,
+        member.display_avatar.url
     )
 
     await send_log(
@@ -1213,7 +1231,8 @@ async def on_member_ban(
         "Member Banned",
         f"**User:** `{user}`\n"
         f"**ID:** `{user.id}`",
-        0xED4245
+        0xED4245,
+        user.display_avatar.url
     )
 
     await send_log(
@@ -1232,7 +1251,8 @@ async def on_member_unban(
         "Member Unbanned",
         f"**User:** `{user}`\n"
         f"**ID:** `{user.id}`",
-        0x57F287
+        0x57F287,
+        user.display_avatar.url
     )
 
     await send_log(
