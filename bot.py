@@ -24,7 +24,7 @@ bot = commands.Bot(
 # 2. IDs
 # =========================================================
 
-WELCOME_CHANNEL_ID = 1448989203508629544
+WELCOME_CHANNEL_ID = 863844473851215893
 
 # ئەگەر کەناڵی بەخێرهاتنت ئەمە نییە، ID ـەکە بگۆڕە.
 
@@ -49,21 +49,37 @@ async def on_member_join(member):
     channel = bot.get_channel(WELCOME_CHANNEL_ID)
 
     if channel is None:
+        print("❌ Welcome channel not found.")
         return
 
     try:
-        file = discord.File(
-            "welcome.gif",
-            filename="welcome.gif"
+
+        embed = discord.Embed(
+            title="WELCOME",
+            description=(
+                f"{member.mention}\n"
+                f"baxer beyt bo karezma"
+            )
+        )
+
+        # وێنەی پرۆفایلی ئەو کەسە لای ڕاست
+        embed.set_thumbnail(
+            url=member.display_avatar.url
         )
 
         await channel.send(
-            content=f"بەخێر بێیت {member.mention}! ✨",
-            file=file
+            embed=embed
+        )
+
+        print(
+            f"✅ Welcome sent for {member}"
         )
 
     except Exception as e:
-        print(f"کێشەیەک لە بەخێرهاتن ڕوویدا: {e}")
+
+        print(
+            f"❌ Welcome error: {repr(e)}"
+        )
 
 
 # =========================================================
