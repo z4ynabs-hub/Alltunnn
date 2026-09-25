@@ -72,7 +72,7 @@ intents.message_content = True
 intents.voice_states = True
 
 
-# لێرەدا پێشگرمان لابرد و کرد بە بەتاڵ بۆ ئەوەی بێ پێشگر کار بکەن
+# بێ پێشگر کار دەکات
 bot = commands.Bot(
     command_prefix="",
     intents=intents
@@ -622,6 +622,8 @@ async def clear(ctx, amount: int):
         await ctx.message.delete()
     except Exception:
         pass
+    
+    # سڕینەوەی نامەکان بە لیمتی دروست
     deleted = await ctx.channel.purge(limit=amount)
     msg = await ctx.send(f"✅ `{len(deleted)}` نامە سڕایەوە.")
     await msg.delete(delay=2)
@@ -635,11 +637,15 @@ async def mute(ctx, member: discord.Member = None):
     except Exception:
         pass
     
+    # ئەگەر مەبەمەر دیاری نەکرا، سەیری ڕیپڵەی نامەکە دەکات
     if member is None and ctx.message.reference:
-        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        member = ref_msg.author
+        try:
+            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            member = ref_msg.author
+        except Exception:
+            pass
 
-    if not member:
+    if not member or not isinstance(member, discord.Member):
         return
 
     mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
@@ -647,13 +653,20 @@ async def mute(ctx, member: discord.Member = None):
         try:
             mute_role = await ctx.guild.create_role(name="Muted")
             for channel in ctx.guild.channels:
-                await channel.set_permissions(mute_role, send_messages=False, speak=False)
+                try:
+                    await channel.set_permissions(mute_role, send_messages=False, speak=False)
+                except Exception:
+                    pass
         except Exception:
             pass
 
     if mute_role:
-        await member.add_roles(mute_role)
-        await ctx.send(f"🔇 {member.mention} میوت کرا.")
+        try:
+            await member.add_roles(mute_role)
+            msg = await ctx.send(f"🔇 {member.mention} میوت کرا.")
+            await msg.delete(delay=4)
+        except Exception:
+            pass
 
 
 @bot.command(name="unmute")
@@ -665,16 +678,23 @@ async def unmute(ctx, member: discord.Member = None):
         pass
     
     if member is None and ctx.message.reference:
-        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        member = ref_msg.author
+        try:
+            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            member = ref_msg.author
+        except Exception:
+            pass
 
-    if not member:
+    if not member or not isinstance(member, discord.Member):
         return
 
     mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
     if mute_role and mute_role in member.roles:
-        await member.remove_roles(mute_role)
-        await ctx.send(f"🔊 {member.mention} ئەنمیوت کرا.")
+        try:
+            await member.remove_roles(mute_role)
+            msg = await ctx.send(f"🔊 {member.mention} ئەنمیوت کرا.")
+            await msg.delete(delay=4)
+        except Exception:
+            pass
 
 
 @bot.command(name="ban")
@@ -686,14 +706,21 @@ async def ban(ctx, member: discord.Member = None):
         pass
     
     if member is None and ctx.message.reference:
-        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-        member = ref_msg.author
+        try:
+            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+            member = ref_msg.author
+        except Exception:
+            pass
 
-    if not member:
+    if not member or not isinstance(member, discord.Member):
         return
 
-    await member.ban()
-    await ctx.send(f"🔨 {member.mention} باندی کرا.")
+    try:
+        await member.ban()
+        msg = await ctx.send(f"🔨 {member.mention} باندی کرا.")
+        await msg.delete(delay=4)
+    except Exception:
+        pass
 
 
 @bot.command(name="unban")
@@ -703,9 +730,14 @@ async def unban(ctx, user_id: int):
         await ctx.message.delete()
     except Exception:
         pass
-    user = await bot.fetch_user(user_id)
-    await ctx.guild.unban(user)
-    await ctx.send(f"🔓 `{user}` ئەنباندی کرا.")
+    
+    try:
+        user = await bot.fetch_user(user_id)
+        await ctx.guild.unban(user)
+        msg = await ctx.send(f"🔓 `{user}` ئەنباندی کرا.")
+        await msg.delete(delay=4)
+    except Exception:
+        pass
 
 
 # ============================================================
