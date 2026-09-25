@@ -614,9 +614,9 @@ async def test(
 # PREFIX-LESS MODERATION COMMANDS
 # ============================================================
 
-@bot.command(name="clear")
+@bot.command(name="safika")
 @commands.has_permissions(manage_messages=True)
-async def clear(ctx, amount: int):
+async def safika(ctx, amount: int):
     try:
         await ctx.message.delete()
     except Exception:
@@ -654,7 +654,6 @@ async def mute(ctx, member: discord.Member = None):
 
     if mute_role:
         try:
-            # گەڕان بە ناو گشت کەناڵەکانی سێرڤەرەکە (چ دەنگی و چ دەق) و قەدەغەکردنی چات
             for channel in ctx.guild.channels:
                 try:
                     await channel.set_permissions(mute_role, send_messages=False, add_reactions=False)
@@ -662,7 +661,7 @@ async def mute(ctx, member: discord.Member = None):
                     pass
 
             await member.add_roles(mute_role)
-            msg = await ctx.send(f"🔇 {member.mention} میوت کرا و چات لە گشت کەناڵەکان (دەنگی و دەق) لێی قەدەغە کرا.")
+            msg = await ctx.send(f"damt daxaa {member.mention}")
             await msg.delete(delay=4)
         except Exception:
             pass
@@ -690,7 +689,7 @@ async def unmute(ctx, member: discord.Member = None):
     if mute_role and mute_role in member.roles:
         try:
             await member.remove_roles(mute_role)
-            msg = await ctx.send(f"🔊 {member.mention} ئەنمیوت کرا.")
+            msg = await ctx.send(f"xwa xerm bnwse aqllba amjara {member.mention}")
             await msg.delete(delay=4)
         except Exception:
             pass
@@ -728,9 +727,9 @@ async def unlock(ctx):
         pass
 
 
-@bot.command(name="ban")
+@bot.command(name="bfra")
 @commands.has_permissions(ban_members=True)
-async def ban(ctx, member: discord.Member = None):
+async def bfra(ctx, member: discord.Member = None):
     try:
         await ctx.message.delete()
     except Exception:
@@ -748,7 +747,7 @@ async def ban(ctx, member: discord.Member = None):
 
     try:
         await member.ban()
-        msg = await ctx.send(f"🔨 {member.mention} باندی کرا.")
+        msg = await ctx.send(f"frenraa✈️ {member.mention}")
         await msg.delete(delay=4)
     except Exception:
         pass
@@ -986,7 +985,7 @@ async def on_guild_channel_update(
         and before.topic != after.topic
     ):
         changes.append(
-            "**Topic:** changed"
+            f"**Topic:** `{before.topic}` → `{after.topic}`"
         )
 
     if before.position != after.position:
@@ -1064,7 +1063,7 @@ async def on_member_update(
             lines.append(
                 "**Added:** "
                 + ", ".join(
-                    r.mention
+                    f"`{r.name}` ({r.mention})"
                     for r in added
                 )
             )
@@ -1073,7 +1072,7 @@ async def on_member_update(
             lines.append(
                 "**Removed:** "
                 + ", ".join(
-                    r.name
+                    f"`{r.name}`"
                     for r in removed
                 )
             )
