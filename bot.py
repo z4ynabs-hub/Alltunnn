@@ -39,6 +39,11 @@ LOG_CHANNELS = {
     "nickname": 867085807445213215,
 }
 
+# لێرەدا ئایدی ئەو کەناڵانە دابنە کە دەتەوێت کاتێک میوت دەکرێت چاتیان لێ بگرێت
+LOCKED_CHANNELS_IDS = [
+    # 863857498719780874,  # نموونەی ئایدی کەناڵ
+]
+
 
 # ============================================================
 # WELCOME IMAGE SETTINGS
@@ -612,7 +617,7 @@ async def test(
 
 
 # ============================================================
-# PREFIX-LESS MODERATION COMMANDS (clear, mute, unmute, ban, unban)
+# PREFIX-LESS MODERATION COMMANDS (clear, mute, unmute, ban, unban, lock, unlock)
 # ============================================================
 
 @bot.command(name="clear")
@@ -650,18 +655,19 @@ async def mute(ctx, member: discord.Member = None):
     if not mute_role:
         try:
             mute_role = await ctx.guild.create_role(name="Muted")
-            for channel in ctx.guild.channels:
-                try:
-                    await channel.set_permissions(mute_role, send_messages=False)
-                except Exception:
-                    pass
         except Exception:
             pass
 
     if mute_role:
         try:
+            # قەدەغەکردنی نوسین لەو کەناڵانەی کە ئایدییەکانیان لە ليستدا دراون
+            for channel_id in LOCKED_CHANNELS_IDS:
+                channel = ctx.guild.get_channel(channel_id)
+                if channel:
+                    await channel.set_permissions(mute_role, send_messages=False, add_reactions=False)
+
             await member.add_roles(mute_role)
-            msg = await ctx.send(f"🔇 {member.mention} لە چاتدا میوت کرا.")
+            msg = await ctx.send(f"🔇 {member.mention} میوت کرا.")
             await msg.delete(delay=4)
         except Exception:
             pass
@@ -689,10 +695,42 @@ async def unmute(ctx, member: discord.Member = None):
     if mute_role and mute_role in member.roles:
         try:
             await member.remove_roles(mute_role)
-            msg = await ctx.send(f"🔊 {member.mention} لە چاتدا ئەنمیوت کرا.")
+            msg = await ctx.send(f"🔊 {member.mention} ئەنمیوت کرا.")
             await msg.delete(delay=4)
         except Exception:
             pass
+
+
+@bot.command(name="lock")
+@commands.has_permissions(manage_channels=True)
+async def lock(ctx):
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    
+    try:
+        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
+        msg = await ctx.send("🔒 ئەم کەناڵە داخرا.")
+        await msg.delete(delay=4)
+    except Exception:
+        pass
+
+
+@bot.command(name="unlock")
+@commands.has_permissions(manage_channels=True)
+async def unlock(ctx):
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    
+    try:
+        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=True)
+        msg = await ctx.send("🔓 ئەم کەناڵە کرایەوە.")
+        await msg.delete(delay=4)
+    except Exception:
+        pass
 
 
 @bot.command(name="ban")
