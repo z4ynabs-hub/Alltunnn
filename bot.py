@@ -149,83 +149,70 @@ async def send_log(
 
 
 # ============================================================
-# MUTED ROLE
+# GET MEMBER FROM MENTION / REPLY
 # ============================================================
 
-async def get_or_create_muted_role(
-    guild: discord.Guild
+async def get_target_member(
+    ctx,
+    member: discord.Member = None
 ):
     """
-    Find the existing Muted role.
-    If it doesn't exist, create it and protect all channels.
+    Target can be:
+    1. Mention:
+       mute @user
+       Bfra @user
+
+    2. Reply:
+       Reply to user's message + mute
+       Reply to user's message + Bfra
+
+    3. If both exist, mention has priority.
     """
 
-    mute_role = discord.utils.get(
-        guild.roles,
-        name="Muted"
-    )
+    if member is not None:
+        return member
 
-    if mute_role:
-        return mute_role
+    if ctx.message.reference:
 
-    try:
-        mute_role = await guild.create_role(
-            name="Muted",
-            reason="Karezma mute role"
-        )
-
-        print(
-            f"Created Muted role in {guild.name}"
-        )
-
-    except discord.Forbidden:
-        print(
-            "Muted role error: Bot cannot create roles."
-        )
-        return None
-
-    except discord.HTTPException as e:
-        print(
-            "Muted role HTTP error:",
-            repr(e)
-        )
-        return None
-
-    # Protect every existing channel
-    for channel in guild.channels:
         try:
-            await channel.set_permissions(
-                mute_role,
-                send_messages=False,
-                add_reactions=False,
-                send_messages_in_threads=False,
-                reason="Karezma Muted role"
+            ref_message = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
             )
-        except (
-            discord.Forbidden,
-            discord.HTTPException,
-            TypeError
-        ):
-            pass
 
-    return mute_role
+            if isinstance(
+                ref_message.author,
+                discord.Member
+            ):
+                return ref_message.author
 
+        except Exception as e:
+
+            print(
+                "Reply target error:",
+                repr(e)
+            )
+
+    return None
+
+
+# ============================================================
+# MUTED ROLE
+# ============================================================
 
 async def apply_muted_permissions(
     channel,
     mute_role
 ):
-    """
-    Apply Muted permissions to one channel.
-    """
-
     try:
+
         await channel.set_permissions(
             mute_role,
             send_messages=False,
             add_reactions=False,
             send_messages_in_threads=False,
-            reason="Karezma mute protection"
+            create_public_threads=False,
+            create_private_threads=False,
+            reason="Karezma Muted role protection"
         )
 
     except (
@@ -236,6 +223,58 @@ async def apply_muted_permissions(
         pass
 
 
+async def get_or_create_muted_role(
+    guild: discord.Guild
+):
+
+    mute_role = discord.utils.get(
+        guild.roles,
+        name="Muted"
+    )
+
+    if mute_role:
+
+        return mute_role
+
+    try:
+
+        mute_role = await guild.create_role(
+            name="Muted",
+            reason="Karezma mute role"
+        )
+
+        print(
+            f"Created Muted role in {guild.name}"
+        )
+
+    except discord.Forbidden:
+
+        print(
+            "Muted role error: Bot cannot create roles."
+        )
+
+        return None
+
+    except discord.HTTPException as e:
+
+        print(
+            "Muted role HTTP error:",
+            repr(e)
+        )
+
+        return None
+
+    # Apply mute permissions to every existing channel
+    for channel in guild.channels:
+
+        await apply_muted_permissions(
+            channel,
+            mute_role
+        )
+
+    return mute_role
+
+
 # ============================================================
 # LOG CHANNEL PERMISSIONS
 # ============================================================
@@ -243,6 +282,7 @@ async def apply_muted_permissions(
 async def protect_log_channels(
     guild: discord.Guild
 ):
+
     for channel_id in LOG_CHANNELS.values():
 
         channel = guild.get_channel(
@@ -253,6 +293,7 @@ async def protect_log_channels(
             continue
 
         try:
+
             await channel.set_permissions(
                 guild.default_role,
                 view_channel=False,
@@ -266,6 +307,7 @@ async def protect_log_channels(
                 )
 
                 if role:
+
                     await channel.set_permissions(
                         role,
                         view_channel=True,
@@ -290,12 +332,14 @@ def get_font(
 ):
 
     if bold:
+
         candidates = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
         ]
 
     else:
+
         candidates = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
@@ -304,6 +348,7 @@ def get_font(
     for path in candidates:
 
         if os.path.exists(path):
+
             return ImageFont.truetype(
                 path,
                 size
@@ -369,6 +414,7 @@ async def create_welcome_image(
     if not os.path.exists(
         TEMPLATE_FILE
     ):
+
         raise FileNotFoundError(
             "welcome_template.jpg نەدۆزرایەوە."
         )
@@ -432,6 +478,7 @@ async def create_welcome_image(
         > max_width
         and name_font.size > 20
     ):
+
         name_font = get_font(
             name_font.size - 2,
             bold=True
@@ -523,7 +570,7 @@ async def on_ready():
                 guild
             )
 
-            # Make sure Muted role exists
+            # Existing Muted role
             mute_role = discord.utils.get(
                 guild.roles,
                 name="Muted"
@@ -547,7 +594,7 @@ async def on_ready():
 
 
 # ============================================================
-# WELCOME
+# MEMBER JOIN
 # ============================================================
 
 @bot.event
@@ -623,7 +670,7 @@ async def on_member_join(
 
 
 # ============================================================
-# LEAVE
+# MEMBER LEAVE
 # ============================================================
 
 @bot.event
@@ -761,50 +808,44 @@ async def test(
 
 
 # ============================================================
-# SAFICA / SAFIKA
-# ============================================================
+# SAFIKA
 #
-# IMPORTANT:
-# case_insensitive=True already makes:
+# Because case_insensitive=True:
 #
-# safica
-# Safica
-# SAFICA
-# SaFiCa
+# safika
+# Safika
+# SAFIKA
+# SaFiKa
 #
 # all work.
-#
-# "safika" is also supported as an alias.
-#
 # ============================================================
 
 @bot.command(
-    name="safica",
-    aliases=["safika"]
+    name="safika"
 )
 @commands.has_permissions(
     manage_messages=True
 )
-async def safica(
+async def safika(
     ctx,
     amount: int = None
 ):
 
-    # Delete the command message
+    # Delete command itself
     try:
+
         await ctx.message.delete()
+
     except Exception:
         pass
 
-    # No number
     if amount is None:
         return
 
-    # Invalid number
     if amount <= 0:
         return
 
-    # Prevent unreasonable values
+    # Maximum requested amount
     if amount > 10000:
         amount = 10000
 
@@ -816,34 +857,45 @@ async def safica(
         )
 
         print(
-            f"Safica deleted {len(deleted)} messages "
+            f"Safika deleted {len(deleted)} messages "
             f"in #{ctx.channel.name}"
         )
 
     except discord.Forbidden:
 
         print(
-            "Safica error: Bot does not have "
-            "Manage Messages permission."
+            "Safika error: Bot needs Manage Messages."
         )
 
     except discord.HTTPException as e:
 
         print(
-            "Safica HTTP error:",
+            "Safika HTTP error:",
             repr(e)
         )
 
     except Exception as e:
 
         print(
-            "Safica error:",
+            "Safika error:",
             repr(e)
         )
 
 
 # ============================================================
 # MUTE
+#
+# Examples:
+#
+# mute @User
+# Mute @User
+# MUTE @User
+#
+# OR:
+#
+# Reply to user's message
+# mute
+#
 # ============================================================
 
 @bot.command(
@@ -857,34 +909,24 @@ async def mute(
     member: discord.Member = None
 ):
 
-    # Delete command message
+    # Delete command
     try:
+
         await ctx.message.delete()
+
     except Exception:
         pass
 
-    # If no member was mentioned, check Reply
-    if member is None and ctx.message.reference:
-
-        try:
-
-            ref_msg = await ctx.channel.fetch_message(
-                ctx.message.reference.message_id
-            )
-
-            member = ref_msg.author
-
-        except Exception as e:
-
-            print(
-                "Mute reply error:",
-                repr(e)
-            )
+    # Get member from mention OR reply
+    member = await get_target_member(
+        ctx,
+        member
+    )
 
     if member is None:
         return
 
-    # Get or create Muted role
+    # Get/create Muted role
     mute_role = await get_or_create_muted_role(
         ctx.guild
     )
@@ -892,12 +934,20 @@ async def mute(
     if mute_role is None:
         return
 
-    # Make sure bot can manage the role
+    # Bot must be above Muted role
     if mute_role >= ctx.guild.me.top_role:
 
         print(
-            "Mute error: Muted role is above "
-            "or equal to bot's highest role."
+            "Mute error: Muted role must be below bot role."
+        )
+
+        return
+
+    # Bot cannot mute someone above/equal to itself
+    if member.top_role >= ctx.guild.me.top_role:
+
+        print(
+            "Mute error: Target role is too high."
         )
 
         return
@@ -920,8 +970,7 @@ async def mute(
     except discord.Forbidden:
 
         print(
-            "Mute error: Bot cannot manage "
-            "this member/role."
+            "Mute error: Bot cannot manage this member."
         )
 
     except discord.HTTPException as e:
@@ -941,6 +990,17 @@ async def mute(
 
 # ============================================================
 # UNMUTE
+#
+# Examples:
+#
+# unmute @User
+# Unmute @User
+# UNMUTE @User
+#
+# OR reply to user's message:
+#
+# unmute
+#
 # ============================================================
 
 @bot.command(
@@ -954,29 +1014,19 @@ async def unmute(
     member: discord.Member = None
 ):
 
-    # Delete command message
+    # Delete command
     try:
+
         await ctx.message.delete()
+
     except Exception:
         pass
 
-    # If no member was mentioned, check Reply
-    if member is None and ctx.message.reference:
-
-        try:
-
-            ref_msg = await ctx.channel.fetch_message(
-                ctx.message.reference.message_id
-            )
-
-            member = ref_msg.author
-
-        except Exception as e:
-
-            print(
-                "Unmute reply error:",
-                repr(e)
-            )
+    # Get member from mention OR reply
+    member = await get_target_member(
+        ctx,
+        member
+    )
 
     if member is None:
         return
@@ -1006,8 +1056,7 @@ async def unmute(
     except discord.Forbidden:
 
         print(
-            "Unmute error: Bot cannot manage "
-            "this member/role."
+            "Unmute error: Bot cannot manage this member."
         )
 
     except discord.HTTPException as e:
@@ -1026,6 +1075,212 @@ async def unmute(
 
 
 # ============================================================
+# BFRA = BAN
+#
+# IMPORTANT:
+# You wanted Bfra, not "ban".
+#
+# Because case_insensitive=True:
+#
+# bfra
+# Bfra
+# BFRA
+#
+# all work.
+#
+# It also works by Reply:
+#
+# Reply to user message + bfra
+#
+# ============================================================
+
+@bot.command(
+    name="bfra"
+)
+@commands.has_permissions(
+    ban_members=True
+)
+async def bfra(
+    ctx,
+    member: discord.Member = None
+):
+
+    # Delete command
+    try:
+
+        await ctx.message.delete()
+
+    except Exception:
+        pass
+
+    # Get member from mention OR reply
+    member = await get_target_member(
+        ctx,
+        member
+    )
+
+    if member is None:
+        return
+
+    # Bot cannot ban itself
+    if member.id == bot.user.id:
+        return
+
+    # Bot cannot ban someone above/equal to itself
+    if member.top_role >= ctx.guild.me.top_role:
+
+        print(
+            "Bfra error: Target role is too high."
+        )
+
+        return
+
+    try:
+
+        await member.ban(
+            reason=f"Karezma Bfra by {ctx.author}"
+        )
+
+        msg = await ctx.send(
+            f"frenraa✈️ {member.mention}"
+        )
+
+        await msg.delete(
+            delay=2
+        )
+
+        print(
+            f"Bfra banned {member} by {ctx.author}"
+        )
+
+    except discord.Forbidden:
+
+        print(
+            "Bfra error: Bot needs Ban Members permission."
+        )
+
+    except discord.HTTPException as e:
+
+        print(
+            "Bfra HTTP error:",
+            repr(e)
+        )
+
+    except Exception as e:
+
+        print(
+            "Bfra error:",
+            repr(e)
+        )
+
+
+# ============================================================
+# UNBAN
+#
+# Works with:
+#
+# unban USER_ID
+#
+# OR reply to a message from the banned user
+# ============================================================
+
+@bot.command(
+    name="unban"
+)
+@commands.has_permissions(
+    ban_members=True
+)
+async def unban(
+    ctx,
+    user_id: int = None
+):
+
+    # Delete command
+    try:
+
+        await ctx.message.delete()
+
+    except Exception:
+        pass
+
+    user = None
+
+    # If ID was provided
+    if user_id is not None:
+
+        try:
+
+            user = await bot.fetch_user(
+                user_id
+            )
+
+        except Exception:
+            return
+
+    # If replying to a user's message
+    elif ctx.message.reference:
+
+        try:
+
+            ref_message = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
+            )
+
+            user = ref_message.author
+
+        except Exception:
+            return
+
+    if user is None:
+        return
+
+    try:
+
+        await ctx.guild.unban(
+            user,
+            reason=f"Karezma unban by {ctx.author}"
+        )
+
+        msg = await ctx.send(
+            f"🔓 `{user}` ئەنباندی کرا."
+        )
+
+        await msg.delete(
+            delay=2
+        )
+
+        print(
+            f"Unbanned {user} by {ctx.author}"
+        )
+
+    except discord.NotFound:
+
+        print(
+            "Unban error: User is not banned."
+        )
+
+    except discord.Forbidden:
+
+        print(
+            "Unban error: Bot needs Ban Members permission."
+        )
+
+    except discord.HTTPException as e:
+
+        print(
+            "Unban HTTP error:",
+            repr(e)
+        )
+
+    except Exception as e:
+
+        print(
+            "Unban error:",
+            repr(e)
+        )
+
+
+# ============================================================
 # LOCK
 # ============================================================
 
@@ -1038,7 +1293,9 @@ async def unmute(
 async def lock(ctx):
 
     try:
+
         await ctx.message.delete()
+
     except Exception:
         pass
 
@@ -1078,7 +1335,9 @@ async def lock(ctx):
 async def unlock(ctx):
 
     try:
+
         await ctx.message.delete()
+
     except Exception:
         pass
 
@@ -1106,111 +1365,7 @@ async def unlock(ctx):
 
 
 # ============================================================
-# BAN
-# ============================================================
-
-@bot.command(
-    name="bfra"
-)
-@commands.has_permissions(
-    ban_members=True
-)
-async def bfra(
-    ctx,
-    member: discord.Member = None
-):
-
-    try:
-        await ctx.message.delete()
-    except Exception:
-        pass
-
-    if member is None and ctx.message.reference:
-
-        try:
-
-            ref_msg = await ctx.channel.fetch_message(
-                ctx.message.reference.message_id
-            )
-
-            member = ref_msg.author
-
-        except Exception:
-            pass
-
-    if member is None:
-        return
-
-    try:
-
-        await member.ban(
-            reason=f"Karezma ban by {ctx.author}"
-        )
-
-        msg = await ctx.send(
-            f"frenraa✈️ {member.mention}"
-        )
-
-        await msg.delete(
-            delay=2
-        )
-
-    except Exception as e:
-
-        print(
-            "Ban error:",
-            repr(e)
-        )
-
-
-# ============================================================
-# UNBAN
-# ============================================================
-
-@bot.command(
-    name="unban"
-)
-@commands.has_permissions(
-    ban_members=True
-)
-async def unban(
-    ctx,
-    user_id: int
-):
-
-    try:
-        await ctx.message.delete()
-    except Exception:
-        pass
-
-    try:
-
-        user = await bot.fetch_user(
-            user_id
-        )
-
-        await ctx.guild.unban(
-            user
-        )
-
-        msg = await ctx.send(
-            f"🔓 `{user}` ئەنباندی کرا."
-        )
-
-        await msg.delete(
-            delay=2
-        )
-
-    except Exception as e:
-
-        print(
-            "Unban error:",
-            repr(e)
-        )
-
-
-# ============================================================
-# LOG EVENTS
+# MESSAGE DELETE LOG
 # ============================================================
 
 @bot.event
@@ -1245,6 +1400,10 @@ async def on_message_delete(
         embed
     )
 
+
+# ============================================================
+# MESSAGE EDIT LOG
+# ============================================================
 
 @bot.event
 async def on_message_edit(
@@ -1291,7 +1450,7 @@ async def on_message_edit(
 
 
 # ============================================================
-# ROLE EVENTS
+# ROLE CREATE
 # ============================================================
 
 @bot.event
@@ -1314,6 +1473,10 @@ async def on_guild_role_create(
     )
 
 
+# ============================================================
+# ROLE DELETE
+# ============================================================
+
 @bot.event
 async def on_guild_role_delete(
     role: discord.Role
@@ -1332,6 +1495,10 @@ async def on_guild_role_delete(
         embed
     )
 
+
+# ============================================================
+# ROLE UPDATE
+# ============================================================
 
 @bot.event
 async def on_guild_role_update(
@@ -1377,7 +1544,7 @@ async def on_guild_role_update(
 
 
 # ============================================================
-# CHANNEL EVENTS
+# CHANNEL CREATE
 # ============================================================
 
 @bot.event
@@ -1385,8 +1552,7 @@ async def on_guild_channel_create(
     channel: discord.abc.GuildChannel
 ):
 
-    # If Muted role already exists,
-    # automatically protect new channel.
+    # Protect newly-created channel from Muted role
     mute_role = discord.utils.get(
         channel.guild.roles,
         name="Muted"
@@ -1420,6 +1586,10 @@ async def on_guild_channel_create(
     )
 
 
+# ============================================================
+# CHANNEL DELETE
+# ============================================================
+
 @bot.event
 async def on_guild_channel_delete(
     channel: discord.abc.GuildChannel
@@ -1439,6 +1609,10 @@ async def on_guild_channel_delete(
         embed
     )
 
+
+# ============================================================
+# CHANNEL UPDATE
+# ============================================================
 
 @bot.event
 async def on_guild_channel_update(
@@ -1503,10 +1677,7 @@ async def on_member_update(
     after: discord.Member
 ):
 
-    # ----------------------------
     # Nickname
-    # ----------------------------
-
     if before.nick != after.nick:
 
         old = (
@@ -1573,10 +1744,7 @@ async def on_member_update(
             embed
         )
 
-    # ----------------------------
     # Roles
-    # ----------------------------
-
     before_roles = {
         r.id: r
         for r in before.roles
@@ -1864,28 +2032,24 @@ async def on_command_error(
     error
 ):
 
-    # Ignore unknown messages/commands
     if isinstance(
         error,
         commands.CommandNotFound
     ):
         return
 
-    # Ignore missing arguments silently
     if isinstance(
         error,
         commands.MissingRequiredArgument
     ):
         return
 
-    # Ignore permission errors silently
     if isinstance(
         error,
         commands.MissingPermissions
     ):
         return
 
-    # Ignore invalid member silently
     if isinstance(
         error,
         commands.MemberNotFound
@@ -1911,7 +2075,6 @@ if not TOKEN:
     raise RuntimeError(
         "DISCORD_TOKEN environment variable is missing."
     )
-
 
 bot.run(
     TOKEN
