@@ -624,9 +624,8 @@ async def safica(ctx, amount: int):
     
     try:
         deleted = await ctx.channel.purge(limit=amount, bulk=True)
-        if deleted:
-            msg = await ctx.send(f"✅ `{len(deleted)}` نامە سڕایەوە.")
-            await msg.delete(delay=1.5)
+        msg = await ctx.send(f"✅ `{len(deleted)}` نامە سڕایەوە.")
+        await msg.delete(delay=2)
     except Exception as e:
         print("Safica error:", repr(e))
 
@@ -663,9 +662,9 @@ async def mute(ctx, member: discord.Member = None):
 
     if mute_role:
         try:
-            await member.add_roles(mute_role, reason=f"Muted by {ctx.author}")
+            await member.add_roles(mute_role)
             msg = await ctx.send(f"damt daxaa {member.mention}")
-            await msg.delete(delay=1.5)
+            await msg.delete(delay=2)
         except Exception:
             pass
 
@@ -691,9 +690,9 @@ async def unmute(ctx, member: discord.Member = None):
     mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
     if mute_role and mute_role in member.roles:
         try:
-            await member.remove_roles(mute_role, reason=f"Unmuted by {ctx.author}")
+            await member.remove_roles(mute_role)
             msg = await ctx.send(f"xwa xerm bnwse aqllba amjara {member.mention}")
-            await msg.delete(delay=1.5)
+            await msg.delete(delay=2)
         except Exception:
             pass
 
@@ -709,7 +708,7 @@ async def lock(ctx):
     try:
         await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
         msg = await ctx.send("🔒 ئەم کەناڵە داخرا.")
-        await msg.delete(delay=1.5)
+        await msg.delete(delay=2)
     except Exception:
         pass
 
@@ -725,7 +724,7 @@ async def unlock(ctx):
     try:
         await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=True)
         msg = await ctx.send("🔓 ئەم کەناڵە کرایەوە.")
-        await msg.delete(delay=1.5)
+        await msg.delete(delay=2)
     except Exception:
         pass
 
@@ -749,9 +748,9 @@ async def bfra(ctx, member: discord.Member = None):
         return
 
     try:
-        await member.ban(reason=f"Banned by {ctx.author}")
+        await member.ban()
         msg = await ctx.send(f"frenraa✈️ {member.mention}")
-        await msg.delete(delay=1.5)
+        await msg.delete(delay=2)
     except Exception:
         pass
 
@@ -766,9 +765,9 @@ async def unban(ctx, user_id: int):
     
     try:
         user = await bot.fetch_user(user_id)
-        await ctx.guild.unban(user, reason=f"Unbanned by {ctx.author}")
+        await ctx.guild.unban(user)
         msg = await ctx.send(f"🔓 `{user}` ئەنباندی کرا.")
-        await msg.delete(delay=1.5)
+        await msg.delete(delay=2)
     except Exception:
         pass
 
@@ -1032,7 +1031,7 @@ async def on_member_update(
 
         updater = None
         try:
-            async for entry in after.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_update):
+            async for entry in after.guild.audit_logs(limit=3, action=discord.AuditLogAction.member_update):
                 if entry.target.id == after.id:
                     updater = entry.user
                     break
@@ -1082,7 +1081,7 @@ async def on_member_update(
     if added or removed:
         updater = None
         try:
-            async for entry in after.guild.audit_logs(limit=5, action=discord.AuditLogAction.member_role_update):
+            async for entry in after.guild.audit_logs(limit=3, action=discord.AuditLogAction.member_role_update):
                 if entry.target.id == after.id:
                     updater = entry.user
                     break
