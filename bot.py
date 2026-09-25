@@ -74,7 +74,8 @@ intents.voice_states = True
 
 bot = commands.Bot(
     command_prefix="",
-    intents=intents
+    intents=intents,
+    case_insensitive=True
 )
 
 
@@ -610,23 +611,26 @@ async def test(
 
 
 # ============================================================
-# PREFIX-LESS MODERATION COMMANDS
+# PREFIX-LESS MODERATION COMMANDS (Case-Insensitive)
 # ============================================================
 
-@bot.command(name="safika")
+@bot.command(name="safica", aliases=["Safica", "SAFICA"])
 @commands.has_permissions(manage_messages=True)
-async def safika(ctx, amount: int):
+async def safica(ctx, amount: int):
     try:
         await ctx.message.delete()
     except Exception:
         pass
     
-    deleted = await ctx.channel.purge(limit=amount)
-    msg = await ctx.send(f"✅ `{len(deleted)}` نامە سڕایەوە.")
-    await msg.delete(delay=2)
+    try:
+        deleted = await ctx.channel.purge(limit=amount, bulk=True)
+        msg = await ctx.send(f"✅ `{len(deleted)}` نامە سڕایەوە.")
+        await msg.delete(delay=2)
+    except Exception as e:
+        print("Safica error:", repr(e))
 
 
-@bot.command(name="mute")
+@bot.command(name="mute", aliases=["Mute", "MUTE"])
 @commands.has_permissions(manage_roles=True)
 async def mute(ctx, member: discord.Member = None):
     try:
@@ -648,25 +652,24 @@ async def mute(ctx, member: discord.Member = None):
     if not mute_role:
         try:
             mute_role = await ctx.guild.create_role(name="Muted")
-        except Exception:
-            pass
-
-    if mute_role:
-        try:
             for channel in ctx.guild.channels:
                 try:
                     await channel.set_permissions(mute_role, send_messages=False, add_reactions=False)
                 except Exception:
                     pass
+        except Exception:
+            pass
 
+    if mute_role:
+        try:
             await member.add_roles(mute_role)
             msg = await ctx.send(f"damt daxaa {member.mention}")
-            await msg.delete(delay=4)
+            await msg.delete(delay=2)
         except Exception:
             pass
 
 
-@bot.command(name="unmute")
+@bot.command(name="unmute", aliases=["Unmute", "UNMUTE"])
 @commands.has_permissions(manage_roles=True)
 async def unmute(ctx, member: discord.Member = None):
     try:
@@ -689,12 +692,12 @@ async def unmute(ctx, member: discord.Member = None):
         try:
             await member.remove_roles(mute_role)
             msg = await ctx.send(f"xwa xerm bnwse aqllba amjara {member.mention}")
-            await msg.delete(delay=4)
+            await msg.delete(delay=2)
         except Exception:
             pass
 
 
-@bot.command(name="lock")
+@bot.command(name="lock", aliases=["Lock", "LOCK"])
 @commands.has_permissions(manage_channels=True)
 async def lock(ctx):
     try:
@@ -705,12 +708,12 @@ async def lock(ctx):
     try:
         await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
         msg = await ctx.send("🔒 ئەم کەناڵە داخرا.")
-        await msg.delete(delay=4)
+        await msg.delete(delay=2)
     except Exception:
         pass
 
 
-@bot.command(name="unlock")
+@bot.command(name="unlock", aliases=["Unlock", "UNLOCK"])
 @commands.has_permissions(manage_channels=True)
 async def unlock(ctx):
     try:
@@ -721,12 +724,12 @@ async def unlock(ctx):
     try:
         await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=True)
         msg = await ctx.send("🔓 ئەم کەناڵە کرایەوە.")
-        await msg.delete(delay=4)
+        await msg.delete(delay=2)
     except Exception:
         pass
 
 
-@bot.command(name="bfra")
+@bot.command(name="bfra", aliases=["Bfra", "BFRA"])
 @commands.has_permissions(ban_members=True)
 async def bfra(ctx, member: discord.Member = None):
     try:
@@ -747,12 +750,12 @@ async def bfra(ctx, member: discord.Member = None):
     try:
         await member.ban()
         msg = await ctx.send(f"frenraa✈️ {member.mention}")
-        await msg.delete(delay=4)
+        await msg.delete(delay=2)
     except Exception:
         pass
 
 
-@bot.command(name="unban")
+@bot.command(name="unban", aliases=["Unban", "UNBAN"])
 @commands.has_permissions(ban_members=True)
 async def unban(ctx, user_id: int):
     try:
@@ -764,7 +767,7 @@ async def unban(ctx, user_id: int):
         user = await bot.fetch_user(user_id)
         await ctx.guild.unban(user)
         msg = await ctx.send(f"🔓 `{user}` ئەنباندی کرا.")
-        await msg.delete(delay=4)
+        await msg.delete(delay=2)
     except Exception:
         pass
 
@@ -1026,11 +1029,30 @@ async def on_member_update(
         old = before.nick or before.name
         new = after.nick or after.name
 
+        updater = None
+        try:
+            async for entry in after.guild.audit_logs(limit=3, action=discord.AuditLogAction.member_update):
+                if entry.target.id == after.id:
+                    updater = entry.user
+                    break
+        except Exception:
+            pass
+
+        lines = [
+            f"**Member:** {after.mention}"
+        ]
+        
+        if updater:
+            lines.append(f"**By:** {updater.mention}")
+        else:
+            lines.append(f"**By:** {after.mention} *(Self/Reset)*")
+
+        lines.append(f"**Before:** `{old}`")
+        lines.append(f"**After:** `{new}`")
+
         embed = create_log_embed(
             "Nickname Changed",
-            f"**Member:** {after.mention}\n"
-            f"**Before:** `{old}`\n"
-            f"**After:** `{new}`",
+            "\n".join(lines),
             0xFEE75C,
             after.display_avatar.url
         )
@@ -1057,7 +1079,6 @@ async def on_member_update(
     ]
 
     if added or removed:
-        # دۆزینەوەی ئەو کەسەی کە گۆڕانکاری لە ڕۆڵەکاندا کردووە (Audit Logs)
         updater = None
         try:
             async for entry in after.guild.audit_logs(limit=3, action=discord.AuditLogAction.member_role_update):
