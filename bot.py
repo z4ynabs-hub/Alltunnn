@@ -623,7 +623,6 @@ async def clear(ctx, amount: int):
     except Exception:
         pass
     
-    # سڕینەوەی نامەکان بە لیمتی دروست
     deleted = await ctx.channel.purge(limit=amount)
     msg = await ctx.send(f"✅ `{len(deleted)}` نامە سڕایەوە.")
     await msg.delete(delay=2)
@@ -637,7 +636,6 @@ async def mute(ctx, member: discord.Member = None):
     except Exception:
         pass
     
-    # ئەگەر مەبەمەر دیاری نەکرا، سەیری ڕیپڵەی نامەکە دەکات
     if member is None and ctx.message.reference:
         try:
             ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
@@ -654,7 +652,7 @@ async def mute(ctx, member: discord.Member = None):
             mute_role = await ctx.guild.create_role(name="Muted")
             for channel in ctx.guild.channels:
                 try:
-                    await channel.set_permissions(mute_role, send_messages=False, speak=False)
+                    await channel.set_permissions(mute_role, send_messages=False)
                 except Exception:
                     pass
         except Exception:
@@ -663,7 +661,7 @@ async def mute(ctx, member: discord.Member = None):
     if mute_role:
         try:
             await member.add_roles(mute_role)
-            msg = await ctx.send(f"🔇 {member.mention} میوت کرا.")
+            msg = await ctx.send(f"🔇 {member.mention} لە چاتدا میوت کرا.")
             await msg.delete(delay=4)
         except Exception:
             pass
@@ -691,7 +689,7 @@ async def unmute(ctx, member: discord.Member = None):
     if mute_role and mute_role in member.roles:
         try:
             await member.remove_roles(mute_role)
-            msg = await ctx.send(f"🔊 {member.mention} ئەنمیوت کرا.")
+            msg = await ctx.send(f"🔊 {member.mention} لە چاتدا ئەنمیوت کرا.")
             await msg.delete(delay=4)
         except Exception:
             pass
