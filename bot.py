@@ -654,11 +654,15 @@ async def mute(ctx, member: discord.Member = None):
 
     if mute_role:
         try:
-            for channel in ctx.guild.text_channels:
-                await channel.set_permissions(mute_role, send_messages=False, add_reactions=False)
+            # گەڕان بە ناو گشت کەناڵەکانی سێرڤەرەکە (چ دەنگی و چ دەق) و قەدەغەکردنی چات
+            for channel in ctx.guild.channels:
+                try:
+                    await channel.set_permissions(mute_role, send_messages=False, add_reactions=False)
+                except Exception:
+                    pass
 
             await member.add_roles(mute_role)
-            msg = await ctx.send(f"🔇 {member.mention} میوت کرا و چات لە هەموو کەناڵەکان لێی قەدەغە کرا.")
+            msg = await ctx.send(f"🔇 {member.mention} میوت کرا و چات لە گشت کەناڵەکان (دەنگی و دەق) لێی قەدەغە کرا.")
             await msg.delete(delay=4)
         except Exception:
             pass
