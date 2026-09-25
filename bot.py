@@ -46,13 +46,11 @@ LOG_CHANNELS = {
 
 TEMPLATE_FILE = "welcome_template.jpg"
 
-# شوێنی بۆکسی وێنەی ئەندام لە لای ڕاست
 AVATAR_X = 690
 AVATAR_Y = 70
 AVATAR_W = 430
 AVATAR_H = 430
 
-# شوێنی دەقەکانی لای چەپ
 NAME_X = 70
 NAME_Y = 150
 
@@ -68,15 +66,15 @@ WELCOME_Y = 300
 # ============================================================
 
 intents = discord.Intents.default()
-
 intents.guilds = True
 intents.members = True
 intents.message_content = True
 intents.voice_states = True
 
 
+# لێرەدا پێشگرمان لابرد و کرد بە بەتاڵ بۆ ئەوەی بێ پێشگر کار بکەن
 bot = commands.Bot(
-    command_prefix="!",
+    command_prefix="",
     intents=intents
 )
 
@@ -115,7 +113,6 @@ async def send_log(
     log_type: str,
     embed: discord.Embed
 ):
-
     channel_id = LOG_CHANNELS.get(log_type)
 
     if not channel_id:
@@ -145,9 +142,7 @@ async def send_log(
 async def protect_log_channels(
     guild: discord.Guild
 ):
-
     for channel_id in LOG_CHANNELS.values():
-
         channel = guild.get_channel(
             channel_id
         )
@@ -156,23 +151,18 @@ async def protect_log_channels(
             continue
 
         try:
-
-            # @everyone ناتوانێت Log ـەکان ببینێت
             await channel.set_permissions(
                 guild.default_role,
                 view_channel=False,
                 reason="Karezma log protection"
             )
 
-            # تەنها ئەم 3 Role ـە
             for role_id in LOG_VIEW_ROLE_IDS:
-
                 role = guild.get_role(
                     role_id
                 )
 
                 if role:
-
                     await channel.set_permissions(
                         role,
                         view_channel=True,
@@ -188,32 +178,26 @@ async def protect_log_channels(
 
 
 # ============================================================
-# FONT
+# FONT & AVATAR
 # ============================================================
 
 def get_font(
     size: int,
     bold=False
 ):
-
     if bold:
-
         candidates = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
         ]
-
     else:
-
         candidates = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
         ]
 
     for path in candidates:
-
         if os.path.exists(path):
-
             return ImageFont.truetype(
                 path,
                 size
@@ -222,16 +206,11 @@ def get_font(
     return ImageFont.load_default()
 
 
-# ============================================================
-# AVATAR PROCESSING
-# ============================================================
-
 def create_avatar(
     avatar_bytes,
     width,
     height
 ):
-
     avatar = Image.open(
         io.BytesIO(avatar_bytes)
     ).convert("RGBA")
@@ -272,28 +251,20 @@ def create_avatar(
     return avatar
 
 
-# ============================================================
-# CREATE WELCOME IMAGE
-# ============================================================
-
 async def create_welcome_image(
     member: discord.Member
 ):
-
     if not os.path.exists(
         TEMPLATE_FILE
     ):
-
         raise FileNotFoundError(
             "welcome_template.jpg نەدۆزرایەوە."
         )
 
-    # Template
     background = Image.open(
         TEMPLATE_FILE
     ).convert("RGBA")
 
-    # Member avatar
     avatar_asset = member.display_avatar.replace(
         format="png",
         size=512
@@ -307,7 +278,6 @@ async def create_welcome_image(
         AVATAR_H
     )
 
-    # دانانی وێنە لە بۆکسی لای ڕاست
     background.alpha_composite(
         avatar,
         (
@@ -320,29 +290,24 @@ async def create_welcome_image(
         background
     )
 
-    # Fonts
     name_font = get_font(
         48,
         bold=True
     )
-
     sub_font = get_font(
         28,
         bold=False
     )
-
     welcome_font = get_font(
         42,
         bold=True
     )
 
-    # ناوی ئەندام
     name = (
         "@"
         + member.display_name
     )
 
-    # ئەگەر ناوەکە زۆر درێژ بوو
     max_width = max(
         200,
         AVATAR_X - NAME_X - 50
@@ -353,13 +318,11 @@ async def create_welcome_image(
         > max_width
         and name_font.size > 20
     ):
-
         name_font = get_font(
             name_font.size - 2,
             bold=True
         )
 
-    # ناوی ئەندام
     draw.text(
         (
             NAME_X,
@@ -375,7 +338,6 @@ async def create_welcome_image(
         )
     )
 
-    # دەقی بەخێرهاتن
     draw.text(
         (
             SUBTEXT_X,
@@ -391,7 +353,6 @@ async def create_welcome_image(
         )
     )
 
-    # WELCOME
     draw.text(
         (
             WELCOME_X,
@@ -407,7 +368,6 @@ async def create_welcome_image(
         )
     )
 
-    # Save to memory
     output = io.BytesIO()
 
     background.convert(
@@ -430,13 +390,11 @@ async def create_welcome_image(
 
 @bot.event
 async def on_ready():
-
     print(
         f"Logged in as {bot.user}"
     )
 
     try:
-
         synced = await bot.tree.sync()
 
         print(
@@ -444,13 +402,11 @@ async def on_ready():
         )
 
         for guild in bot.guilds:
-
             await protect_log_channels(
                 guild
             )
 
     except Exception as e:
-
         print(
             "Ready error:",
             repr(e)
@@ -458,30 +414,25 @@ async def on_ready():
 
 
 # ============================================================
-# WELCOME
+# WELCOME & LEAVE EVENTS
 # ============================================================
 
 @bot.event
 async def on_member_join(
     member: discord.Member
 ):
-
     welcome_channel = member.guild.get_channel(
         WELCOME_CHANNEL_ID
     )
 
     if welcome_channel:
-
         try:
-
             image = await create_welcome_image(
                 member
             )
 
             await welcome_channel.send(
-
                 content=member.mention,
-
                 file=discord.File(
                     image,
                     filename="welcome.jpg"
@@ -489,16 +440,12 @@ async def on_member_join(
             )
 
         except Exception as e:
-
             print(
                 "Welcome image error:",
                 repr(e)
             )
 
-            # ئەگەر وێنەکە دروست نەکرا
-            # fallback embed
             try:
-
                 embed = discord.Embed(
                     title="WELCOME",
                     description=(
@@ -520,16 +467,12 @@ async def on_member_join(
             except Exception:
                 pass
 
-    # Join Log
     embed = create_log_embed(
-
         "Member Joined",
-
         f"**Member:** {member.mention}\n"
         f"**Username:** `{member}`\n"
         f"**ID:** `{member.id}`\n"
         f"**Time:** `{current_time()}`",
-
         0x57F287
     )
 
@@ -544,23 +487,15 @@ async def on_member_join(
     )
 
 
-# ============================================================
-# MEMBER LEFT
-# ============================================================
-
 @bot.event
 async def on_member_remove(
     member: discord.Member
 ):
-
     embed = create_log_embed(
-
         "Member Left",
-
         f"**Member:** `{member}`\n"
         f"**ID:** `{member.id}`\n"
         f"**Time:** `{current_time()}`",
-
         0xED4245
     )
 
@@ -576,79 +511,61 @@ async def on_member_remove(
 
 
 # ============================================================
-# /STAF
-# ONLY ADMINISTRATORS
+# /STAF COMMAND (SLASH)
 # ============================================================
 
 @bot.tree.command(
     name="staf",
     description="Give both Staff roles to a member"
 )
-
 @app_commands.describe(
     name="Choose the member"
 )
-
 @app_commands.default_permissions(
     administrator=True
 )
-
 async def staf(
     interaction: discord.Interaction,
     name: discord.Member
 ):
-
-    # Runtime security
     if not interaction.user.guild_permissions.administrator:
-
         await interaction.response.send_message(
             "❌ تەنها Administrator دەتوانێت ئەم فرمانە بەکاربهێنێت.",
             ephemeral=True
         )
-
         return
 
     role1 = interaction.guild.get_role(
         STAFF_ROLE_IDS[0]
     )
-
     role2 = interaction.guild.get_role(
         STAFF_ROLE_IDS[1]
     )
 
     if role1 is None or role2 is None:
-
         await interaction.response.send_message(
             "❌ Staff Role ـەکان نەدۆزرایەوە.",
             ephemeral=True
         )
-
         return
 
     bot_member = interaction.guild.me
 
     if (
         role1 >= bot_member.top_role
-        or
-        role2 >= bot_member.top_role
+        or role2 >= bot_member.top_role
     ):
-
         await interaction.response.send_message(
             "❌ Staff Role ـەکان دەبێت لە ژێر Highest Role ـی بۆتەکە بن.",
             ephemeral=True
         )
-
         return
 
     try:
-
         await name.add_roles(
             role1,
             role2,
-            reason=(
-                f"Karezma /staf by "
-                f"{interaction.user}"
-            )
+            reason=f"Karezma /staf by {interaction.user}"
         )
 
         await interaction.response.send_message(
@@ -656,15 +573,11 @@ async def staf(
             ephemeral=True
         )
 
-        # Staff Log
         embed = create_log_embed(
-
             "Staff Granted",
-
             f"**Admin:** {interaction.user.mention}\n"
             f"**Member:** {name.mention}\n"
             f"**Roles:** {role1.mention}, {role2.mention}",
-
             0x5865F2
         )
 
@@ -675,7 +588,6 @@ async def staf(
         )
 
     except discord.Forbidden:
-
         await interaction.response.send_message(
             "❌ بۆتەکە دەسەڵاتی Manage Roles نییە.",
             ephemeral=True
@@ -683,18 +595,16 @@ async def staf(
 
 
 # ============================================================
-# /TEST
+# /TEST COMMAND
 # ============================================================
 
 @bot.tree.command(
     name="test",
     description="Test Karezma bot"
 )
-
 async def test(
     interaction: discord.Interaction
 ):
-
     await interaction.response.send_message(
         "✅ Karezma is online!",
         ephemeral=True
@@ -702,14 +612,110 @@ async def test(
 
 
 # ============================================================
-# MESSAGE DELETE LOG
+# PREFIX-LESS MODERATION COMMANDS (clear, mute, unmute, ban, unban)
+# ============================================================
+
+@bot.command(name="clear")
+@commands.has_permissions(manage_messages=True)
+async def clear(ctx, amount: int):
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    deleted = await ctx.channel.purge(limit=amount)
+    msg = await ctx.send(f"✅ `{len(deleted)}` نامە سڕایەوە.")
+    await msg.delete(delay=2)
+
+
+@bot.command(name="mute")
+@commands.has_permissions(manage_roles=True)
+async def mute(ctx, member: discord.Member = None):
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    
+    if member is None and ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        member = ref_msg.author
+
+    if not member:
+        return
+
+    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
+    if not mute_role:
+        try:
+            mute_role = await ctx.guild.create_role(name="Muted")
+            for channel in ctx.guild.channels:
+                await channel.set_permissions(mute_role, send_messages=False, speak=False)
+        except Exception:
+            pass
+
+    if mute_role:
+        await member.add_roles(mute_role)
+        await ctx.send(f"🔇 {member.mention} میوت کرا.")
+
+
+@bot.command(name="unmute")
+@commands.has_permissions(manage_roles=True)
+async def unmute(ctx, member: discord.Member = None):
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    
+    if member is None and ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        member = ref_msg.author
+
+    if not member:
+        return
+
+    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
+    if mute_role and mute_role in member.roles:
+        await member.remove_roles(mute_role)
+        await ctx.send(f"🔊 {member.mention} ئەنمیوت کرا.")
+
+
+@bot.command(name="ban")
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member = None):
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    
+    if member is None and ctx.message.reference:
+        ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        member = ref_msg.author
+
+    if not member:
+        return
+
+    await member.ban()
+    await ctx.send(f"🔨 {member.mention} باندی کرا.")
+
+
+@bot.command(name="unban")
+@commands.has_permissions(ban_members=True)
+async def unban(ctx, user_id: int):
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    user = await bot.fetch_user(user_id)
+    await ctx.guild.unban(user)
+    await ctx.send(f"🔓 `{user}` ئەنباندی کرا.")
+
+
+# ============================================================
+# LOG EVENTS (Messages, Roles, Channels, Voice, Server, Bans)
 # ============================================================
 
 @bot.event
 async def on_message_delete(
     message: discord.Message
 ):
-
     if (
         not message.guild
         or message.author.bot
@@ -723,13 +729,10 @@ async def on_message_delete(
     )
 
     embed = create_log_embed(
-
         "Message Deleted",
-
         f"**Author:** {message.author.mention}\n"
         f"**Channel:** {message.channel.mention}\n"
         f"**Content:** `{content}`",
-
         0xED4245
     )
 
@@ -740,16 +743,11 @@ async def on_message_delete(
     )
 
 
-# ============================================================
-# MESSAGE EDIT LOG
-# ============================================================
-
 @bot.event
 async def on_message_edit(
     before: discord.Message,
     after: discord.Message
 ):
-
     if (
         not before.guild
         or before.author.bot
@@ -772,14 +770,11 @@ async def on_message_edit(
     )
 
     embed = create_log_embed(
-
         "Message Edited",
-
         f"**Author:** {before.author.mention}\n"
         f"**Channel:** {before.channel.mention}\n\n"
         f"**Before:** `{old}`\n"
         f"**After:** `{new}`",
-
         0xFEE75C
     )
 
@@ -790,23 +785,15 @@ async def on_message_edit(
     )
 
 
-# ============================================================
-# ROLE CREATE
-# ============================================================
-
 @bot.event
 async def on_guild_role_create(
     role: discord.Role
 ):
-
     embed = create_log_embed(
-
         "Role Created",
-
         f"**Role:** {role.mention}\n"
         f"**Name:** `{role.name}`\n"
         f"**ID:** `{role.id}`",
-
         0x57F287
     )
 
@@ -817,22 +804,14 @@ async def on_guild_role_create(
     )
 
 
-# ============================================================
-# ROLE DELETE
-# ============================================================
-
 @bot.event
 async def on_guild_role_delete(
     role: discord.Role
 ):
-
     embed = create_log_embed(
-
         "Role Deleted",
-
         f"**Name:** `{role.name}`\n"
         f"**ID:** `{role.id}`",
-
         0xED4245
     )
 
@@ -843,32 +822,24 @@ async def on_guild_role_delete(
     )
 
 
-# ============================================================
-# ROLE UPDATE
-# ============================================================
-
 @bot.event
 async def on_guild_role_update(
     before: discord.Role,
     after: discord.Role
 ):
-
     changes = []
 
     if before.name != after.name:
-
         changes.append(
             f"**Name:** `{before.name}` → `{after.name}`"
         )
 
     if before.permissions != after.permissions:
-
         changes.append(
             "**Permissions:** changed"
         )
 
     if before.position != after.position:
-
         changes.append(
             f"**Position:** `{before.position}` → `{after.position}`"
         )
@@ -877,12 +848,9 @@ async def on_guild_role_update(
         return
 
     embed = create_log_embed(
-
         "Role Updated",
-
         f"**Role:** {after.mention}\n"
         + "\n".join(changes),
-
         0xFEE75C
     )
 
@@ -893,15 +861,10 @@ async def on_guild_role_update(
     )
 
 
-# ============================================================
-# CHANNEL CREATE
-# ============================================================
-
 @bot.event
 async def on_guild_channel_create(
     channel: discord.abc.GuildChannel
 ):
-
     mention = (
         channel.mention
         if hasattr(channel, "mention")
@@ -909,13 +872,10 @@ async def on_guild_channel_create(
     )
 
     embed = create_log_embed(
-
         "Channel Created",
-
         f"**Channel:** {mention}\n"
         f"**Name:** `{channel.name}`\n"
         f"**Type:** `{channel.type}`",
-
         0x57F287
     )
 
@@ -926,23 +886,15 @@ async def on_guild_channel_create(
     )
 
 
-# ============================================================
-# CHANNEL DELETE
-# ============================================================
-
 @bot.event
 async def on_guild_channel_delete(
     channel: discord.abc.GuildChannel
 ):
-
     embed = create_log_embed(
-
         "Channel Deleted",
-
         f"**Name:** `{channel.name}`\n"
         f"**Type:** `{channel.type}`\n"
         f"**ID:** `{channel.id}`",
-
         0xED4245
     )
 
@@ -953,20 +905,14 @@ async def on_guild_channel_delete(
     )
 
 
-# ============================================================
-# CHANNEL UPDATE
-# ============================================================
-
 @bot.event
 async def on_guild_channel_update(
     before: discord.abc.GuildChannel,
     after: discord.abc.GuildChannel
 ):
-
     changes = []
 
     if before.name != after.name:
-
         changes.append(
             f"**Name:** `{before.name}` → `{after.name}`"
         )
@@ -976,13 +922,11 @@ async def on_guild_channel_update(
         and hasattr(after, "topic")
         and before.topic != after.topic
     ):
-
         changes.append(
             "**Topic:** changed"
         )
 
     if before.position != after.position:
-
         changes.append(
             f"**Position:** `{before.position}` → `{after.position}`"
         )
@@ -997,12 +941,9 @@ async def on_guild_channel_update(
     )
 
     embed = create_log_embed(
-
         "Channel Updated",
-
         f"**Channel:** {mention}\n"
         + "\n".join(changes),
-
         0xFEE75C
     )
 
@@ -1013,37 +954,20 @@ async def on_guild_channel_update(
     )
 
 
-# ============================================================
-# MEMBER UPDATE
-# ============================================================
-
 @bot.event
 async def on_member_update(
     before: discord.Member,
     after: discord.Member
 ):
-
-    # Nickname
     if before.nick != after.nick:
-
-        old = (
-            before.nick
-            or before.name
-        )
-
-        new = (
-            after.nick
-            or after.name
-        )
+        old = before.nick or before.name
+        new = after.nick or after.name
 
         embed = create_log_embed(
-
             "Nickname Changed",
-
             f"**Member:** {after.mention}\n"
             f"**Before:** `{old}`\n"
             f"**After:** `{new}`",
-
             0xFEE75C
         )
 
@@ -1053,16 +977,8 @@ async def on_member_update(
             embed
         )
 
-    # Roles
-    before_roles = {
-        r.id: r
-        for r in before.roles
-    }
-
-    after_roles = {
-        r.id: r
-        for r in after.roles
-    }
+    before_roles = {r.id: r for r in before.roles}
+    after_roles = {r.id: r for r in after.roles}
 
     added = [
         after_roles[rid]
@@ -1077,13 +993,11 @@ async def on_member_update(
     ]
 
     if added or removed:
-
         lines = [
             f"**Member:** {after.mention}"
         ]
 
         if added:
-
             lines.append(
                 "**Added:** "
                 + ", ".join(
@@ -1093,7 +1007,6 @@ async def on_member_update(
             )
 
         if removed:
-
             lines.append(
                 "**Removed:** "
                 + ", ".join(
@@ -1103,11 +1016,8 @@ async def on_member_update(
             )
 
         embed = create_log_embed(
-
             "Member Roles Updated",
-
             "\n".join(lines),
-
             0x5865F2
         )
 
@@ -1118,49 +1028,33 @@ async def on_member_update(
         )
 
 
-# ============================================================
-# VOICE LOG
-# ============================================================
-
 @bot.event
 async def on_voice_state_update(
     member: discord.Member,
     before: discord.VoiceState,
     after: discord.VoiceState
 ):
-
-    # Mute / Deaf
     if before.channel == after.channel:
-
         if (
             before.mute != after.mute
-            or
-            before.deaf != after.deaf
+            or before.deaf != after.deaf
         ):
-
             changes = []
 
             if before.mute != after.mute:
-
                 changes.append(
-                    f"**Server Mute:** "
-                    f"`{before.mute}` → `{after.mute}`"
+                    f"**Server Mute:** `{before.mute}` → `{after.mute}`"
                 )
 
             if before.deaf != after.deaf:
-
                 changes.append(
-                    f"**Server Deaf:** "
-                    f"`{before.deaf}` → `{after.deaf}`"
+                    f"**Server Deaf:** `{before.deaf}` → `{after.deaf}`"
                 )
 
             embed = create_log_embed(
-
                 "Voice State Changed",
-
                 f"**Member:** {member.mention}\n"
                 + "\n".join(changes),
-
                 0xFEE75C
             )
 
@@ -1169,40 +1063,28 @@ async def on_voice_state_update(
                 "voice",
                 embed
             )
-
         return
 
-    # Join
     if (
         before.channel is None
         and after.channel is not None
     ):
-
         title = "Voice Joined"
-
         description = (
             f"**Member:** {member.mention}\n"
             f"**Channel:** {after.channel.mention}"
         )
-
-    # Leave
     elif (
         before.channel is not None
         and after.channel is None
     ):
-
         title = "Voice Left"
-
         description = (
             f"**Member:** {member.mention}\n"
             f"**Channel:** `{before.channel.name}`"
         )
-
-    # Move
     else:
-
         title = "Voice Moved"
-
         description = (
             f"**Member:** {member.mention}\n"
             f"**From:** `{before.channel.name}`\n"
@@ -1222,33 +1104,24 @@ async def on_voice_state_update(
     )
 
 
-# ============================================================
-# SERVER UPDATE
-# ============================================================
-
 @bot.event
 async def on_guild_update(
     before: discord.Guild,
     after: discord.Guild
 ):
-
     changes = []
 
     if before.name != after.name:
-
         changes.append(
-            f"**Server Name:** "
-            f"`{before.name}` → `{after.name}`"
+            f"**Server Name:** `{before.name}` → `{after.name}`"
         )
 
     if before.icon != after.icon:
-
         changes.append(
             "**Server Icon:** changed"
         )
 
     if before.banner != after.banner:
-
         changes.append(
             "**Server Banner:** changed"
         )
@@ -1257,11 +1130,8 @@ async def on_guild_update(
         return
 
     embed = create_log_embed(
-
         "Server Updated",
-
         "\n".join(changes),
-
         0xFEE75C
     )
 
@@ -1272,23 +1142,15 @@ async def on_guild_update(
     )
 
 
-# ============================================================
-# BAN
-# ============================================================
-
 @bot.event
 async def on_member_ban(
     guild: discord.Guild,
     user: discord.User
 ):
-
     embed = create_log_embed(
-
         "Member Banned",
-
         f"**User:** `{user}`\n"
         f"**ID:** `{user.id}`",
-
         0xED4245
     )
 
@@ -1299,23 +1161,15 @@ async def on_member_ban(
     )
 
 
-# ============================================================
-# UNBAN
-# ============================================================
-
 @bot.event
 async def on_member_unban(
     guild: discord.Guild,
     user: discord.User
 ):
-
     embed = create_log_embed(
-
         "Member Unbanned",
-
         f"**User:** `{user}`\n"
         f"**ID:** `{user.id}`",
-
         0x57F287
     )
 
@@ -1335,10 +1189,8 @@ TOKEN = os.getenv(
 )
 
 if not TOKEN:
-
     raise RuntimeError(
         "DISCORD_TOKEN environment variable is missing."
     )
-
 
 bot.run(TOKEN)
