@@ -66,6 +66,7 @@ WELCOME_Y = 300
 # ============================================================
 
 intents = discord.Intents.default()
+
 intents.guilds = True
 intents.members = True
 intents.message_content = True
@@ -103,7 +104,9 @@ def create_log_embed(
     )
 
     if thumbnail_url:
-        embed.set_thumbnail(url=thumbnail_url)
+        embed.set_thumbnail(
+            url=thumbnail_url
+        )
 
     embed.set_footer(
         text="Karezma Logs"
@@ -122,21 +125,115 @@ async def send_log(
     if not channel_id:
         return
 
-    channel = guild.get_channel(channel_id)
+    channel = guild.get_channel(
+        channel_id
+    )
 
     if channel is None:
         try:
-            channel = await bot.fetch_channel(channel_id)
+            channel = await bot.fetch_channel(
+                channel_id
+            )
         except Exception:
             return
 
     try:
-        await channel.send(embed=embed)
+        await channel.send(
+            embed=embed
+        )
     except Exception as e:
         print(
             "Log send error:",
             repr(e)
         )
+
+
+# ============================================================
+# MUTED ROLE
+# ============================================================
+
+async def get_or_create_muted_role(
+    guild: discord.Guild
+):
+    """
+    Find the existing Muted role.
+    If it doesn't exist, create it and protect all channels.
+    """
+
+    mute_role = discord.utils.get(
+        guild.roles,
+        name="Muted"
+    )
+
+    if mute_role:
+        return mute_role
+
+    try:
+        mute_role = await guild.create_role(
+            name="Muted",
+            reason="Karezma mute role"
+        )
+
+        print(
+            f"Created Muted role in {guild.name}"
+        )
+
+    except discord.Forbidden:
+        print(
+            "Muted role error: Bot cannot create roles."
+        )
+        return None
+
+    except discord.HTTPException as e:
+        print(
+            "Muted role HTTP error:",
+            repr(e)
+        )
+        return None
+
+    # Protect every existing channel
+    for channel in guild.channels:
+        try:
+            await channel.set_permissions(
+                mute_role,
+                send_messages=False,
+                add_reactions=False,
+                send_messages_in_threads=False,
+                reason="Karezma Muted role"
+            )
+        except (
+            discord.Forbidden,
+            discord.HTTPException,
+            TypeError
+        ):
+            pass
+
+    return mute_role
+
+
+async def apply_muted_permissions(
+    channel,
+    mute_role
+):
+    """
+    Apply Muted permissions to one channel.
+    """
+
+    try:
+        await channel.set_permissions(
+            mute_role,
+            send_messages=False,
+            add_reactions=False,
+            send_messages_in_threads=False,
+            reason="Karezma mute protection"
+        )
+
+    except (
+        discord.Forbidden,
+        discord.HTTPException,
+        TypeError
+    ):
+        pass
 
 
 # ============================================================
@@ -147,6 +244,7 @@ async def protect_log_channels(
     guild: discord.Guild
 ):
     for channel_id in LOG_CHANNELS.values():
+
         channel = guild.get_channel(
             channel_id
         )
@@ -162,6 +260,7 @@ async def protect_log_channels(
             )
 
             for role_id in LOG_VIEW_ROLE_IDS:
+
                 role = guild.get_role(
                     role_id
                 )
@@ -189,11 +288,13 @@ def get_font(
     size: int,
     bold=False
 ):
+
     if bold:
         candidates = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
         ]
+
     else:
         candidates = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -201,6 +302,7 @@ def get_font(
         ]
 
     for path in candidates:
+
         if os.path.exists(path):
             return ImageFont.truetype(
                 path,
@@ -215,6 +317,7 @@ def create_avatar(
     width,
     height
 ):
+
     avatar = Image.open(
         io.BytesIO(avatar_bytes)
     ).convert("RGBA")
@@ -232,7 +335,9 @@ def create_avatar(
         0
     )
 
-    draw = ImageDraw.Draw(mask)
+    draw = ImageDraw.Draw(
+        mask
+    )
 
     radius = max(
         12,
@@ -250,7 +355,9 @@ def create_avatar(
         fill=255
     )
 
-    avatar.putalpha(mask)
+    avatar.putalpha(
+        mask
+    )
 
     return avatar
 
@@ -258,6 +365,7 @@ def create_avatar(
 async def create_welcome_image(
     member: discord.Member
 ):
+
     if not os.path.exists(
         TEMPLATE_FILE
     ):
@@ -298,10 +406,12 @@ async def create_welcome_image(
         48,
         bold=True
     )
+
     sub_font = get_font(
         28,
         bold=False
     )
+
     welcome_font = get_font(
         42,
         bold=True
@@ -394,11 +504,13 @@ async def create_welcome_image(
 
 @bot.event
 async def on_ready():
+
     print(
         f"Logged in as {bot.user}"
     )
 
     try:
+
         synced = await bot.tree.sync()
 
         print(
@@ -406,11 +518,28 @@ async def on_ready():
         )
 
         for guild in bot.guilds:
+
             await protect_log_channels(
                 guild
             )
 
+            # Make sure Muted role exists
+            mute_role = discord.utils.get(
+                guild.roles,
+                name="Muted"
+            )
+
+            if mute_role:
+
+                for channel in guild.channels:
+
+                    await apply_muted_permissions(
+                        channel,
+                        mute_role
+                    )
+
     except Exception as e:
+
         print(
             "Ready error:",
             repr(e)
@@ -418,19 +547,22 @@ async def on_ready():
 
 
 # ============================================================
-# WELCOME & LEAVE EVENTS
+# WELCOME
 # ============================================================
 
 @bot.event
 async def on_member_join(
     member: discord.Member
 ):
+
     welcome_channel = member.guild.get_channel(
         WELCOME_CHANNEL_ID
     )
 
     if welcome_channel:
+
         try:
+
             image = await create_welcome_image(
                 member
             )
@@ -444,12 +576,14 @@ async def on_member_join(
             )
 
         except Exception as e:
+
             print(
                 "Welcome image error:",
                 repr(e)
             )
 
             try:
+
                 embed = discord.Embed(
                     title="WELCOME",
                     description=(
@@ -488,10 +622,15 @@ async def on_member_join(
     )
 
 
+# ============================================================
+# LEAVE
+# ============================================================
+
 @bot.event
 async def on_member_remove(
     member: discord.Member
 ):
+
     embed = create_log_embed(
         "Member Left",
         f"**Member:** `{member}`\n"
@@ -509,7 +648,7 @@ async def on_member_remove(
 
 
 # ============================================================
-# /STAF COMMAND (SLASH)
+# /STAF
 # ============================================================
 
 @bot.tree.command(
@@ -526,25 +665,31 @@ async def staf(
     interaction: discord.Interaction,
     name: discord.Member
 ):
+
     if not interaction.user.guild_permissions.administrator:
+
         await interaction.response.send_message(
             "❌ تەنها Administrator دەتوانێت ئەم فرمانە بەکاربهێنێت.",
             ephemeral=True
         )
+
         return
 
     role1 = interaction.guild.get_role(
         STAFF_ROLE_IDS[0]
     )
+
     role2 = interaction.guild.get_role(
         STAFF_ROLE_IDS[1]
     )
 
     if role1 is None or role2 is None:
+
         await interaction.response.send_message(
             "❌ Staff Role ـەکان نەدۆزرایەوە.",
             ephemeral=True
         )
+
         return
 
     bot_member = interaction.guild.me
@@ -553,13 +698,16 @@ async def staf(
         role1 >= bot_member.top_role
         or role2 >= bot_member.top_role
     ):
+
         await interaction.response.send_message(
             "❌ Staff Role ـەکان دەبێت لە ژێر Highest Role ـی بۆتەکە بن.",
             ephemeral=True
         )
+
         return
 
     try:
+
         await name.add_roles(
             role1,
             role2,
@@ -587,6 +735,7 @@ async def staf(
         )
 
     except discord.Forbidden:
+
         await interaction.response.send_message(
             "❌ بۆتەکە دەسەڵاتی Manage Roles نییە.",
             ephemeral=True
@@ -594,7 +743,7 @@ async def staf(
 
 
 # ============================================================
-# /TEST COMMAND
+# /TEST
 # ============================================================
 
 @bot.tree.command(
@@ -604,6 +753,7 @@ async def staf(
 async def test(
     interaction: discord.Interaction
 ):
+
     await interaction.response.send_message(
         "✅ Karezma is online!",
         ephemeral=True
@@ -611,165 +761,452 @@ async def test(
 
 
 # ============================================================
-# PREFIX-LESS MODERATION COMMANDS (Case-Insensitive)
+# SAFICA / SAFIKA
+# ============================================================
+#
+# IMPORTANT:
+# case_insensitive=True already makes:
+#
+# safica
+# Safica
+# SAFICA
+# SaFiCa
+#
+# all work.
+#
+# "safika" is also supported as an alias.
+#
 # ============================================================
 
-@bot.command(name="safica", aliases=["Safica", "SAFICA"])
-@commands.has_permissions(manage_messages=True)
-async def safica(ctx, amount: int):
+@bot.command(
+    name="safica",
+    aliases=["safika"]
+)
+@commands.has_permissions(
+    manage_messages=True
+)
+async def safica(
+    ctx,
+    amount: int = None
+):
+
+    # Delete the command message
     try:
         await ctx.message.delete()
     except Exception:
         pass
-    
+
+    # No number
+    if amount is None:
+        return
+
+    # Invalid number
+    if amount <= 0:
+        return
+
+    # Prevent unreasonable values
+    if amount > 10000:
+        amount = 10000
+
     try:
-        deleted = await ctx.channel.purge(limit=amount, bulk=True)
-        msg = await ctx.send(f"✅ `{len(deleted)}` نامە سڕایەوە.")
-        await msg.delete(delay=2)
+
+        deleted = await ctx.channel.purge(
+            limit=amount,
+            bulk=True
+        )
+
+        print(
+            f"Safica deleted {len(deleted)} messages "
+            f"in #{ctx.channel.name}"
+        )
+
+    except discord.Forbidden:
+
+        print(
+            "Safica error: Bot does not have "
+            "Manage Messages permission."
+        )
+
+    except discord.HTTPException as e:
+
+        print(
+            "Safica HTTP error:",
+            repr(e)
+        )
+
     except Exception as e:
-        print("Safica error:", repr(e))
+
+        print(
+            "Safica error:",
+            repr(e)
+        )
 
 
-@bot.command(name="mute", aliases=["Mute", "MUTE"])
-@commands.has_permissions(manage_roles=True)
-async def mute(ctx, member: discord.Member = None):
+# ============================================================
+# MUTE
+# ============================================================
+
+@bot.command(
+    name="mute"
+)
+@commands.has_permissions(
+    manage_roles=True
+)
+async def mute(
+    ctx,
+    member: discord.Member = None
+):
+
+    # Delete command message
     try:
         await ctx.message.delete()
     except Exception:
         pass
-    
-    if member is None and ctx.message.reference:
-        try:
-            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-            member = ref_msg.author
-        except Exception:
-            pass
 
-    if not member or not isinstance(member, discord.Member):
+    # If no member was mentioned, check Reply
+    if member is None and ctx.message.reference:
+
+        try:
+
+            ref_msg = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
+            )
+
+            member = ref_msg.author
+
+        except Exception as e:
+
+            print(
+                "Mute reply error:",
+                repr(e)
+            )
+
+    if member is None:
         return
 
-    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
-    if not mute_role:
-        try:
-            mute_role = await ctx.guild.create_role(name="Muted")
-            for channel in ctx.guild.channels:
-                try:
-                    await channel.set_permissions(mute_role, send_messages=False, add_reactions=False)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+    # Get or create Muted role
+    mute_role = await get_or_create_muted_role(
+        ctx.guild
+    )
 
-    if mute_role:
-        try:
-            await member.add_roles(mute_role)
-            msg = await ctx.send(f"damt daxaa {member.mention}")
-            await msg.delete(delay=2)
-        except Exception:
-            pass
+    if mute_role is None:
+        return
+
+    # Make sure bot can manage the role
+    if mute_role >= ctx.guild.me.top_role:
+
+        print(
+            "Mute error: Muted role is above "
+            "or equal to bot's highest role."
+        )
+
+        return
+
+    # Already muted
+    if mute_role in member.roles:
+        return
+
+    try:
+
+        await member.add_roles(
+            mute_role,
+            reason=f"Karezma mute by {ctx.author}"
+        )
+
+        print(
+            f"Muted {member} by {ctx.author}"
+        )
+
+    except discord.Forbidden:
+
+        print(
+            "Mute error: Bot cannot manage "
+            "this member/role."
+        )
+
+    except discord.HTTPException as e:
+
+        print(
+            "Mute HTTP error:",
+            repr(e)
+        )
+
+    except Exception as e:
+
+        print(
+            "Mute error:",
+            repr(e)
+        )
 
 
-@bot.command(name="unmute", aliases=["Unmute", "UNMUTE"])
-@commands.has_permissions(manage_roles=True)
-async def unmute(ctx, member: discord.Member = None):
+# ============================================================
+# UNMUTE
+# ============================================================
+
+@bot.command(
+    name="unmute"
+)
+@commands.has_permissions(
+    manage_roles=True
+)
+async def unmute(
+    ctx,
+    member: discord.Member = None
+):
+
+    # Delete command message
     try:
         await ctx.message.delete()
     except Exception:
         pass
-    
-    if member is None and ctx.message.reference:
-        try:
-            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-            member = ref_msg.author
-        except Exception:
-            pass
 
-    if not member or not isinstance(member, discord.Member):
+    # If no member was mentioned, check Reply
+    if member is None and ctx.message.reference:
+
+        try:
+
+            ref_msg = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
+            )
+
+            member = ref_msg.author
+
+        except Exception as e:
+
+            print(
+                "Unmute reply error:",
+                repr(e)
+            )
+
+    if member is None:
         return
 
-    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
-    if mute_role and mute_role in member.roles:
-        try:
-            await member.remove_roles(mute_role)
-            msg = await ctx.send(f"xwa xerm bnwse aqllba amjara {member.mention}")
-            await msg.delete(delay=2)
-        except Exception:
-            pass
+    mute_role = discord.utils.get(
+        ctx.guild.roles,
+        name="Muted"
+    )
+
+    if mute_role is None:
+        return
+
+    if mute_role not in member.roles:
+        return
+
+    try:
+
+        await member.remove_roles(
+            mute_role,
+            reason=f"Karezma unmute by {ctx.author}"
+        )
+
+        print(
+            f"Unmuted {member} by {ctx.author}"
+        )
+
+    except discord.Forbidden:
+
+        print(
+            "Unmute error: Bot cannot manage "
+            "this member/role."
+        )
+
+    except discord.HTTPException as e:
+
+        print(
+            "Unmute HTTP error:",
+            repr(e)
+        )
+
+    except Exception as e:
+
+        print(
+            "Unmute error:",
+            repr(e)
+        )
 
 
-@bot.command(name="lock", aliases=["Lock", "LOCK"])
-@commands.has_permissions(manage_channels=True)
+# ============================================================
+# LOCK
+# ============================================================
+
+@bot.command(
+    name="lock"
+)
+@commands.has_permissions(
+    manage_channels=True
+)
 async def lock(ctx):
+
     try:
         await ctx.message.delete()
     except Exception:
         pass
-    
+
     try:
-        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=False)
-        msg = await ctx.send("🔒 ئەم کەناڵە داخرا.")
-        await msg.delete(delay=2)
-    except Exception:
-        pass
+
+        await ctx.channel.set_permissions(
+            ctx.guild.default_role,
+            send_messages=False
+        )
+
+        msg = await ctx.send(
+            "🔒 ئەم کەناڵە داخرا."
+        )
+
+        await msg.delete(
+            delay=2
+        )
+
+    except Exception as e:
+
+        print(
+            "Lock error:",
+            repr(e)
+        )
 
 
-@bot.command(name="unlock", aliases=["Unlock", "UNLOCK"])
-@commands.has_permissions(manage_channels=True)
+# ============================================================
+# UNLOCK
+# ============================================================
+
+@bot.command(
+    name="unlock"
+)
+@commands.has_permissions(
+    manage_channels=True
+)
 async def unlock(ctx):
+
     try:
         await ctx.message.delete()
     except Exception:
         pass
-    
+
     try:
-        await ctx.channel.set_permissions(ctx.guild.default_role, send_messages=True)
-        msg = await ctx.send("🔓 ئەم کەناڵە کرایەوە.")
-        await msg.delete(delay=2)
-    except Exception:
-        pass
+
+        await ctx.channel.set_permissions(
+            ctx.guild.default_role,
+            send_messages=True
+        )
+
+        msg = await ctx.send(
+            "🔓 ئەم کەناڵە کرایەوە."
+        )
+
+        await msg.delete(
+            delay=2
+        )
+
+    except Exception as e:
+
+        print(
+            "Unlock error:",
+            repr(e)
+        )
 
 
-@bot.command(name="bfra", aliases=["Bfra", "BFRA"])
-@commands.has_permissions(ban_members=True)
-async def bfra(ctx, member: discord.Member = None):
+# ============================================================
+# BAN
+# ============================================================
+
+@bot.command(
+    name="bfra"
+)
+@commands.has_permissions(
+    ban_members=True
+)
+async def bfra(
+    ctx,
+    member: discord.Member = None
+):
+
     try:
         await ctx.message.delete()
     except Exception:
         pass
-    
+
     if member is None and ctx.message.reference:
+
         try:
-            ref_msg = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+
+            ref_msg = await ctx.channel.fetch_message(
+                ctx.message.reference.message_id
+            )
+
             member = ref_msg.author
+
         except Exception:
             pass
 
-    if not member or not isinstance(member, discord.Member):
+    if member is None:
         return
 
     try:
-        await member.ban()
-        msg = await ctx.send(f"frenraa✈️ {member.mention}")
-        await msg.delete(delay=2)
-    except Exception:
-        pass
+
+        await member.ban(
+            reason=f"Karezma ban by {ctx.author}"
+        )
+
+        msg = await ctx.send(
+            f"frenraa✈️ {member.mention}"
+        )
+
+        await msg.delete(
+            delay=2
+        )
+
+    except Exception as e:
+
+        print(
+            "Ban error:",
+            repr(e)
+        )
 
 
-@bot.command(name="unban", aliases=["Unban", "UNBAN"])
-@commands.has_permissions(ban_members=True)
-async def unban(ctx, user_id: int):
+# ============================================================
+# UNBAN
+# ============================================================
+
+@bot.command(
+    name="unban"
+)
+@commands.has_permissions(
+    ban_members=True
+)
+async def unban(
+    ctx,
+    user_id: int
+):
+
     try:
         await ctx.message.delete()
     except Exception:
         pass
-    
+
     try:
-        user = await bot.fetch_user(user_id)
-        await ctx.guild.unban(user)
-        msg = await ctx.send(f"🔓 `{user}` ئەنباندی کرا.")
-        await msg.delete(delay=2)
-    except Exception:
-        pass
+
+        user = await bot.fetch_user(
+            user_id
+        )
+
+        await ctx.guild.unban(
+            user
+        )
+
+        msg = await ctx.send(
+            f"🔓 `{user}` ئەنباندی کرا."
+        )
+
+        await msg.delete(
+            delay=2
+        )
+
+    except Exception as e:
+
+        print(
+            "Unban error:",
+            repr(e)
+        )
 
 
 # ============================================================
@@ -780,6 +1217,7 @@ async def unban(ctx, user_id: int):
 async def on_message_delete(
     message: discord.Message
 ):
+
     if (
         not message.guild
         or message.author.bot
@@ -813,6 +1251,7 @@ async def on_message_edit(
     before: discord.Message,
     after: discord.Message
 ):
+
     if (
         not before.guild
         or before.author.bot
@@ -851,10 +1290,15 @@ async def on_message_edit(
     )
 
 
+# ============================================================
+# ROLE EVENTS
+# ============================================================
+
 @bot.event
 async def on_guild_role_create(
     role: discord.Role
 ):
+
     embed = create_log_embed(
         "Role Created",
         f"**Role:** {role.mention}\n"
@@ -874,6 +1318,7 @@ async def on_guild_role_create(
 async def on_guild_role_delete(
     role: discord.Role
 ):
+
     embed = create_log_embed(
         "Role Deleted",
         f"**Name:** `{role.name}`\n"
@@ -893,19 +1338,23 @@ async def on_guild_role_update(
     before: discord.Role,
     after: discord.Role
 ):
+
     changes = []
 
     if before.name != after.name:
+
         changes.append(
             f"**Name:** `{before.name}` → `{after.name}`"
         )
 
     if before.permissions != after.permissions:
+
         changes.append(
             "**Permissions:** changed"
         )
 
     if before.position != after.position:
+
         changes.append(
             f"**Position:** `{before.position}` → `{after.position}`"
         )
@@ -927,10 +1376,29 @@ async def on_guild_role_update(
     )
 
 
+# ============================================================
+# CHANNEL EVENTS
+# ============================================================
+
 @bot.event
 async def on_guild_channel_create(
     channel: discord.abc.GuildChannel
 ):
+
+    # If Muted role already exists,
+    # automatically protect new channel.
+    mute_role = discord.utils.get(
+        channel.guild.roles,
+        name="Muted"
+    )
+
+    if mute_role:
+
+        await apply_muted_permissions(
+            channel,
+            mute_role
+        )
+
     mention = (
         channel.mention
         if hasattr(channel, "mention")
@@ -956,6 +1424,7 @@ async def on_guild_channel_create(
 async def on_guild_channel_delete(
     channel: discord.abc.GuildChannel
 ):
+
     embed = create_log_embed(
         "Channel Deleted",
         f"**Name:** `{channel.name}`\n"
@@ -976,9 +1445,11 @@ async def on_guild_channel_update(
     before: discord.abc.GuildChannel,
     after: discord.abc.GuildChannel
 ):
+
     changes = []
 
     if before.name != after.name:
+
         changes.append(
             f"**Name:** `{before.name}` → `{after.name}`"
         )
@@ -988,11 +1459,13 @@ async def on_guild_channel_update(
         and hasattr(after, "topic")
         and before.topic != after.topic
     ):
+
         changes.append(
             f"**Topic:** `{before.topic}` → `{after.topic}`"
         )
 
     if before.position != after.position:
+
         changes.append(
             f"**Position:** `{before.position}` → `{after.position}`"
         )
@@ -1020,35 +1493,72 @@ async def on_guild_channel_update(
     )
 
 
+# ============================================================
+# MEMBER UPDATE
+# ============================================================
+
 @bot.event
 async def on_member_update(
     before: discord.Member,
     after: discord.Member
 ):
+
+    # ----------------------------
+    # Nickname
+    # ----------------------------
+
     if before.nick != after.nick:
-        old = before.nick or before.name
-        new = after.nick or after.name
+
+        old = (
+            before.nick
+            or before.name
+        )
+
+        new = (
+            after.nick
+            or after.name
+        )
 
         updater = None
+
         try:
-            async for entry in after.guild.audit_logs(limit=3, action=discord.AuditLogAction.member_update):
+
+            async for entry in after.guild.audit_logs(
+                limit=3,
+                action=discord.AuditLogAction.member_update
+            ):
+
                 if entry.target.id == after.id:
+
                     updater = entry.user
                     break
+
         except Exception:
             pass
 
         lines = [
             f"**Member:** {after.mention}"
         ]
-        
-        if updater:
-            lines.append(f"**By:** {updater.mention}")
-        else:
-            lines.append(f"**By:** {after.mention} *(Self/Reset)*")
 
-        lines.append(f"**Before:** `{old}`")
-        lines.append(f"**After:** `{new}`")
+        if updater:
+
+            lines.append(
+                f"**By:** {updater.mention}"
+            )
+
+        else:
+
+            lines.append(
+                f"**By:** {after.mention} *(Self/Reset)*"
+            )
+
+        lines.append(
+            f"**Before:** `{old}`"
+        )
+
+        lines.append(
+            f"**After:** `{new}`"
+        )
 
         embed = create_log_embed(
             "Nickname Changed",
@@ -1063,8 +1573,19 @@ async def on_member_update(
             embed
         )
 
-    before_roles = {r.id: r for r in before.roles}
-    after_roles = {r.id: r for r in after.roles}
+    # ----------------------------
+    # Roles
+    # ----------------------------
+
+    before_roles = {
+        r.id: r
+        for r in before.roles
+    }
+
+    after_roles = {
+        r.id: r
+        for r in after.roles
+    }
 
     added = [
         after_roles[rid]
@@ -1079,23 +1600,36 @@ async def on_member_update(
     ]
 
     if added or removed:
+
         updater = None
+
         try:
-            async for entry in after.guild.audit_logs(limit=3, action=discord.AuditLogAction.member_role_update):
+
+            async for entry in after.guild.audit_logs(
+                limit=3,
+                action=discord.AuditLogAction.member_role_update
+            ):
+
                 if entry.target.id == after.id:
+
                     updater = entry.user
                     break
+
         except Exception:
             pass
 
         lines = [
             f"**Member:** {after.mention}"
         ]
-        
+
         if updater:
-            lines.append(f"**By:** {updater.mention}")
+
+            lines.append(
+                f"**By:** {updater.mention}"
+            )
 
         if added:
+
             lines.append(
                 "**Added:** "
                 + ", ".join(
@@ -1105,6 +1639,7 @@ async def on_member_update(
             )
 
         if removed:
+
             lines.append(
                 "**Removed:** "
                 + ", ".join(
@@ -1127,25 +1662,34 @@ async def on_member_update(
         )
 
 
+# ============================================================
+# VOICE LOG
+# ============================================================
+
 @bot.event
 async def on_voice_state_update(
     member: discord.Member,
     before: discord.VoiceState,
     after: discord.VoiceState
 ):
+
     if before.channel == after.channel:
+
         if (
             before.mute != after.mute
             or before.deaf != after.deaf
         ):
+
             changes = []
 
             if before.mute != after.mute:
+
                 changes.append(
                     f"**Server Mute:** `{before.mute}` → `{after.mute}`"
                 )
 
             if before.deaf != after.deaf:
+
                 changes.append(
                     f"**Server Deaf:** `{before.deaf}` → `{after.deaf}`"
                 )
@@ -1163,28 +1707,37 @@ async def on_voice_state_update(
                 "voice",
                 embed
             )
+
         return
 
     if (
         before.channel is None
         and after.channel is not None
     ):
+
         title = "Voice Joined"
+
         description = (
             f"**Member:** {member.mention}\n"
             f"**Channel:** {after.channel.mention}"
         )
+
     elif (
         before.channel is not None
         and after.channel is None
     ):
+
         title = "Voice Left"
+
         description = (
             f"**Member:** {member.mention}\n"
             f"**Channel:** `{before.channel.name}`"
         )
+
     else:
+
         title = "Voice Moved"
+
         description = (
             f"**Member:** {member.mention}\n"
             f"**From:** `{before.channel.name}`\n"
@@ -1205,24 +1758,32 @@ async def on_voice_state_update(
     )
 
 
+# ============================================================
+# SERVER UPDATE
+# ============================================================
+
 @bot.event
 async def on_guild_update(
     before: discord.Guild,
     after: discord.Guild
 ):
+
     changes = []
 
     if before.name != after.name:
+
         changes.append(
             f"**Server Name:** `{before.name}` → `{after.name}`"
         )
 
     if before.icon != after.icon:
+
         changes.append(
             "**Server Icon:** changed"
         )
 
     if before.banner != after.banner:
+
         changes.append(
             "**Server Banner:** changed"
         )
@@ -1243,11 +1804,16 @@ async def on_guild_update(
     )
 
 
+# ============================================================
+# BAN LOG
+# ============================================================
+
 @bot.event
 async def on_member_ban(
     guild: discord.Guild,
     user: discord.User
 ):
+
     embed = create_log_embed(
         "Member Banned",
         f"**User:** `{user}`\n"
@@ -1263,11 +1829,16 @@ async def on_member_ban(
     )
 
 
+# ============================================================
+# UNBAN LOG
+# ============================================================
+
 @bot.event
 async def on_member_unban(
     guild: discord.Guild,
     user: discord.User
 ):
+
     embed = create_log_embed(
         "Member Unbanned",
         f"**User:** `{user}`\n"
@@ -1284,6 +1855,50 @@ async def on_member_unban(
 
 
 # ============================================================
+# COMMAND ERROR HANDLER
+# ============================================================
+
+@bot.event
+async def on_command_error(
+    ctx,
+    error
+):
+
+    # Ignore unknown messages/commands
+    if isinstance(
+        error,
+        commands.CommandNotFound
+    ):
+        return
+
+    # Ignore missing arguments silently
+    if isinstance(
+        error,
+        commands.MissingRequiredArgument
+    ):
+        return
+
+    # Ignore permission errors silently
+    if isinstance(
+        error,
+        commands.MissingPermissions
+    ):
+        return
+
+    # Ignore invalid member silently
+    if isinstance(
+        error,
+        commands.MemberNotFound
+    ):
+        return
+
+    print(
+        "Command error:",
+        repr(error)
+    )
+
+
+# ============================================================
 # RUN
 # ============================================================
 
@@ -1292,8 +1907,12 @@ TOKEN = os.getenv(
 )
 
 if not TOKEN:
+
     raise RuntimeError(
         "DISCORD_TOKEN environment variable is missing."
     )
 
-bot.run(TOKEN)
+
+bot.run(
+    TOKEN
+)
