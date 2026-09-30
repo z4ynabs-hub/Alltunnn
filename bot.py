@@ -1386,89 +1386,23 @@ async def staff(
             ephemeral=True
         )
 
-# COLOR ROLE SYSTEM
-class ColorRoleSelect(discord.ui.Select):
-    def __init__(self, interaction: discord.Interaction, roles_data):
-        options = []
-
-        for role, status in roles_data[:25]:
-            options.append(
-                discord.SelectOption(
-                    label=f"{role.name} [{status}]",
-                    value=str(role.id)
-                )
-            )
-
-        super().__init__(
-            placeholder="ڕۆڵێک هەڵبژێرە بۆ گۆڕینی ڕەنگ...",
-            min_values=1,
-            max_values=1,
-            options=options
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        if interaction.user.id in RESTRICTED_COLOR_USERS:
-            await interaction.response.send_message(
-                "❌ قەدەغە کراوەی!",
-                ephemeral=True
-            )
-            return
-
-        selected_value = self.values[0]
-        role = interaction.guild.get_role(int(selected_value))
-
-        if role:
-            await interaction.response.send_modal(
-                ColorModal(role)
-            )
-
-
-class ColorModal(discord.ui.Modal, title="گۆڕینی ڕەنگی ڕۆڵ"):
-    color_input = discord.ui.TextInput(
-        label="کۆدی ڕەنگ (#FF0000)",
-        placeholder="#HEX",
-        required=True,
-        max_length=7
-    )
-
-    def __init__(self, role):
-        super().__init__()
-        self.role = role
-
-    async def on_submit(self, interaction: discord.Interaction):
-        try:
-            color_obj = discord.Color(
-                int(
-                    self.color_input.value
-                    .strip()
-                    .lstrip('#'),
-                    16
-                )
-            )
-
-            await self.role.edit(
-                color=color_obj
-            )
-
-            await interaction.response.send_message(
-                "✅ ڕەنگەکە گۆڕدرا!",
-                ephemeral=True
-            )
-        except Exception as e:
-            await interaction.response.send_message(
-                `❌ هەڵە: {e}`,
-                ephemeral=True
-            )
-
-
+# COLOR ROLE SYSTEM (RANGI-ROLE)
 @bot.tree.command(
-    name="rangirole",
-    description="گۆڕینی ڕەنگی ڕۆڵەکان"
+    name="rangi-role",
+    description="گۆڕینی ڕەنگی ڕۆڵ"
 )
-async def rangirole(interaction: discord.Interaction):
+@app_commands.describe(
+    role="ڕۆڵەکە هەڵبژێرە",
+    color="کۆدی ڕەنگ بۆ نموونە #FF0000"
+)
+async def rangi_role(
+    interaction: discord.Interaction,
+    role: discord.Role,
+    color: str
+):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message(
-            "❌ تەنها ئەدیمین.",
+            "❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.",
             ephemeral=True
         )
         return
@@ -1476,33 +1410,44 @@ async def rangirole(interaction: discord.Interaction):
     user_top_role = interaction.user.top_role
     is_owner = interaction.user.id == interaction.guild.owner_id
 
-    # تەنها ئەو ڕۆڵانە دەهێڵینەوە کە لەسەر ئاستی خۆت یان خوار خۆتن، بۆتەکان و @everyone لادەبەین
-    roles_data = []
-    for r in interaction.guild.roles:
-        if r.name == "@everyone" or r.managed or r.bot_id:
-            continue
-        
-        # ئەگەر خاوەن سێرڤەر نەبوو، نابێت ڕۆڵەکانی سەروو خۆی ببینێت
-        if not is_owner and r > user_top_role:
-            continue
-
-        roles_data.append((r, "Normal"))
-
-    if not roles_data:
+    # پشکنین بۆ ئەوەی بۆتەکان، ڕۆڵە بەڕێوەبراوەکان، @everyone و ڕۆڵەکانی سەروو خۆی نەتوانێت بگۆڕیت
+    if role.name == "@everyone" or role.managed or role.is_bot_managed():
         await interaction.response.send_message(
-            "❌ هیچ ڕۆڵێک نییە کە دەسەڵاتت هەبێت دەستکاری بکەیت.",
+            "❌ ناتوانیت ڕەنگی ئەم ڕۆڵە بگۆڕیت!",
             ephemeral=True
         )
         return
 
-    view = discord.ui.View()
-    view.add_item(ColorRoleSelect(interaction, roles_data))
+    if not is_owner and role > user_top_role:
+        await interaction.response.send_message(
+            "❌ ناتوانیت ڕەنگی ئەم ڕۆڵە بگۆڕیت چونکە لەسەروو ڕۆڵەکەتدایە!",
+            ephemeral=True
+        )
+        return
 
-    await interaction.response.send_message(
-        "🎨 **ڕۆڵێک هەڵبژێرە:**",
-        view=view,
-        ephemeral=True
-    )
+    try:
+        color_obj = discord.Color(
+            int(
+                color
+                .strip()
+                .lstrip('#'),
+                16
+            )
+        )
+
+        await role.edit(
+            color=color_obj
+        )
+
+        await interaction.response.send_message(
+            f"✅ ڕەنگی ڕۆڵی **{role.name}** بە سەرکەوتوویی گۆڕدرا!",
+            ephemeral=True
+        )
+    except Exception as e:
+        await interaction.response.send_message(
+            f"❌ هەڵە لە نووسینی کۆدی ڕەنگەکەدا هەیە: {e}",
+            ephemeral=True
+        )
 
 
 @bot.tree.command(
