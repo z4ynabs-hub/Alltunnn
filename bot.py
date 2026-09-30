@@ -226,7 +226,7 @@ async def get_target_member(message):
     return None
 
 # =========================================================
-# 10. MUTED ROLE
+# 10. MUTED ROLE & AUTO-APPLY TO NEW CHANNELS
 # =========================================================
 
 async def apply_muted_permissions(channel, mute_role):
@@ -261,7 +261,7 @@ async def get_or_create_muted_role(guild):
     return mute_role
 
 # =========================================================
-# 11 & 12. CHANNEL CREATE LOG
+# 11 & 12. CHANNEL CREATE LOG + MUTED PERMISSION FIX
 # =========================================================
 
 @bot.event
@@ -320,7 +320,7 @@ async def on_guild_channel_update(before, after):
         editor = entry.user.mention if entry and entry.user else "Unknown"
 
         embed = make_embed(  
-            "✏️ Channel Updated",  
+            "✏️️ Channel Updated",  
             f"**Channel:** {after.mention}\n**ID:** `{after.id}`\n**Updated By:** {editor}\n\n" + "\n".join(changes),  
             discord.Color.gold()  
         )  
@@ -431,7 +431,7 @@ async def on_member_ban(guild, user):
 async def on_member_unban(guild, user):
     entry = await get_audit_executor(guild, discord.AuditLogAction.unban, user.id)  
     admin_text = entry.user.mention if entry and entry.user else "Unknown"  
-    embed = make_embed("♻️️ Member Unbanned", f"**Member:** {user.mention}\n**Unbanned By:** {admin_text}", discord.Color.green())  
+    embed = make_embed("♻️ Member Unbanned", f"**Member:** {user.mention}\n**Unbanned By:** {admin_text}", discord.Color.green())  
     add_user_thumbnail(embed, user)  
     await send_log(BAN_LOG_ID, embed)
 
