@@ -1386,13 +1386,13 @@ async def staff(
             ephemeral=True
         )
 
-# COLOR ROLE SYSTEM (RANGI-ROLE)
+# COLOR ROLE SYSTEM (RANGI-ROLE) WITH AUTOCOMPLETE
 @bot.tree.command(
     name="rangi-role",
     description="گۆڕینی ڕەنگی ڕۆڵ"
 )
 @app_commands.describe(
-    role="ڕۆڵەکە هەڵبژێرە",
+    role="ڕۆڵەکە هەڵبژێرە (ناوی بنووسە یان هەڵبژێرە)",
     color="کۆدی ڕەنگ بۆ نموونە #FF0000"
 )
 async def rangi_role(
@@ -1424,7 +1424,7 @@ async def rangi_role(
         )
         return
 
-    # ڕێگەدان بە تەنها ڕۆڵی خوار خۆی و یەکسان بە خۆی (نەک سەروو خۆی)
+    # ڕێگەدان بە ڕۆڵی خۆی و خوار خۆی، بەڵام قەدەغەکردنی سەروو خۆی
     if not is_owner and role > user_top_role:
         await interaction.response.send_message(
             "❌ ناتوانیت ڕەنگی ئەم ڕۆڵە بگۆڕیت چونکە لەسەروو ڕۆڵەکەتدایە!",
@@ -1455,6 +1455,32 @@ async def rangi_role(
             f"❌ هەڵە لە نووسینی کۆدی ڕەنگەکەدا هەیە: {e}",
             ephemeral=True
         )
+
+@rangi_role.autocomplete("role")
+async def rangi_role_autocomplete(
+    interaction: discord.Interaction,
+    current: str
+):
+    guild = interaction.guild
+    if not guild:
+        return []
+    
+    user_top_role = interaction.user.top_role
+    is_owner = interaction.user.id == guild.owner_id
+
+    options = []
+    for r in guild.roles:
+        if r.name == "@everyone" or r.managed or r.is_bot_managed():
+            continue
+        if not is_owner and r > user_top_role:
+            continue
+        
+        if current.lower() in r.name.lower():
+            options.append(app_commands.Choice(name=r.name, value=str(r.id)))
+            if len(options) >= 25:
+                break
+                
+    return options
 
 
 @bot.tree.command(
