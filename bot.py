@@ -234,6 +234,7 @@ async def apply_muted_permissions(channel, mute_role):
         if isinstance(channel, discord.VoiceChannel):  
             await channel.set_permissions(  
                 mute_role,  
+                view_channel=True,
                 speak=False,  
                 stream=False,  
                 reason="Karezma Muted role"  
@@ -241,6 +242,7 @@ async def apply_muted_permissions(channel, mute_role):
         elif hasattr(channel, "set_permissions"):  
             await channel.set_permissions(  
                 mute_role,  
+                view_channel=True,
                 send_messages=False,  
                 add_reactions=False,  
                 send_messages_in_threads=False,  
