@@ -430,7 +430,7 @@ async def on_member_ban(guild, user):
 async def on_member_unban(guild, user):
     entry = await get_audit_executor(guild, discord.AuditLogAction.unban, user.id)  
     admin_text = entry.user.mention if entry and entry.user else "Unknown"  
-    embed = make_embed("♻️️ Member Unbanned", f"**Member:** {user.mention}\n**Unbanned By:** {admin_text}", discord.Color.green())  
+    embed = make_embed("♻️ Member Unbanned", f"**Member:** {user.mention}\n**Unbanned By:** {admin_text}", discord.Color.green())  
     add_user_thumbnail(embed, user)  
     await send_log(BAN_LOG_ID, embed)
 
@@ -461,7 +461,7 @@ async def on_message_delete(message):
     if message.author.bot or message.guild is None:  
         return  
     content = message.content[:1500] if message.content else "*No text content*"  
-    embed = make_embed("🗑️️ Message Deleted", f"**Author:** {message.author.mention}\n**Channel:** {message.channel.mention}\n\n**Message:**\n```text\n{content}\n```", discord.Color.red())  
+    embed = make_embed("🗑️ Message Deleted", f"**Author:** {message.author.mention}\n**Channel:** {message.channel.mention}\n\n**Message:**\n```text\n{content}\n```", discord.Color.red())  
     add_user_thumbnail(embed, message.author)  
     await send_log(CHAT_LOG_ID, embed)
 
@@ -490,24 +490,6 @@ async def on_message(message):
 
     parts = content.split()  
     command = parts[0].lower()  
-
-    # STAFF
-    if command == "staff":
-        if not message.author.guild_permissions.administrator:
-            return
-        target = await get_target_member(message)
-        if target:
-            r1 = message.guild.get_role(STAFF_ROLE_1)
-            r2 = message.guild.get_role(STAFF_ROLE_2)
-            roles = [r for r in [r1, r2] if r and r not in target.roles]
-            if roles:
-                await target.add_roles(*roles)
-            try:
-                await message.delete()
-            except Exception:
-                pass
-            await message.channel.send(f"✅ ڕۆڵ درا بە {target.mention}", delete_after=3)
-        return
 
     # SAFIKA (PURGE)
     if command == "safika":  
@@ -627,6 +609,32 @@ async def on_message(message):
 # =========================================================
 # 25. SLASH COMMANDS
 # =========================================================
+
+# --- STAFF SLASH COMMAND ---
+@bot.tree.command(name="staff", description="پێدانی ڕۆڵەکانی ستاف بە ئەندام")
+async def staff(interaction: discord.Interaction, member: discord.Member):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True)
+        return
+
+    try:
+        r1 = interaction.guild.get_role(STAFF_ROLE_1)
+        r2 = interaction.guild.get_role(STAFF_ROLE_2)
+        
+        roles_to_add = []
+        if r1 and r1 not in member.roles: 
+            roles_to_add.append(r1)
+        if r2 and r2 not in member.roles: 
+            roles_to_add.append(r2)
+
+        if roles_to_add:
+            await member.add_roles(*roles_to_add, reason=f"Staff given by {interaction.user}")
+            await interaction.response.send_message(f"✅ دوو ڕۆڵی ستاف بە سەرکەوتوویی درا بە {member.mention}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"⚠️ {member.mention} پێشتر هەردوو ڕۆڵەکەی هەیە یان ڕۆڵەکان نەدۆزرانەوە.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ کێشەیەک ڕوویدا: {e}", ephemeral=True)
+
 
 class ColorRoleSelect(discord.ui.Select):
     def __init__(self, roles_data):
