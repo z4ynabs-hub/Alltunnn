@@ -226,60 +226,35 @@ async def get_target_member(message):
     return None
 
 # =========================================================
-# 10. MUTED ROLE & AUTO-APPLY TO ALL CHANNELS
+# 10. MUTED ROLE & PERMISSIONS
 # =========================================================
 
-async def apply_muted_permissions(channel, mute_role):
-    try:  
-        if isinstance(channel, discord.VoiceChannel):  
-            await channel.set_permissions(  
-                mute_role,  
-                view_channel=True,
-                speak=False,  
-                stream=False,  
-                reason="Karezma Muted role"  
-            )  
-        elif hasattr(channel, "set_permissions"):  
-            await channel.set_permissions(  
-                mute_role,  
-                view_channel=True,
-                send_messages=False,  
-                add_reactions=False,  
-                send_messages_in_threads=False,  
-                create_public_threads=False,  
-                create_private_threads=False,  
-                reason="Karezma Muted role"  
-            )  
-    except Exception:
-        pass
-
 async def get_or_create_muted_role(guild):
-    mute_role = discord.utils.get(guild.roles, id=1058553204251578389)  
+    mute_role = guild.get_role(1058553204251578389)  
     if not mute_role:
         mute_role = discord.utils.get(guild.roles, name="Muted")  
     
     if not mute_role:  
         mute_role = await guild.create_role(name="Muted", reason="Karezma mute role")
     
-    # ئەم بەشە دڵنیای دەکاتەوە کە لە کاتی میوتکردندا بەناو هەموو کەناڵەکاندا دەسووڕێتەوە
-    for channel in guild.channels:  
-        await apply_muted_permissions(channel, mute_role)  
-        
     return mute_role
 
 # =========================================================
-# 11 & 12. CHANNEL CREATE LOG + MUTED PERMISSION FIX
+# 11 & 12. CHANNEL CREATE LOG + MUTED PERMISSION
 # =========================================================
 
 @bot.event
 async def on_guild_channel_create(channel):
     try:  
-        mute_role = discord.utils.get(channel.guild.roles, id=1058553204251578389)
+        mute_role = channel.guild.get_role(1058553204251578389)
         if not mute_role:
             mute_role = discord.utils.get(channel.guild.roles, name="Muted")
             
         if mute_role:  
-            await apply_muted_permissions(channel, mute_role)  
+            if isinstance(channel, discord.VoiceChannel):
+                await channel.set_permissions(mute_role, view_channel=True, speak=False, stream=False)
+            elif hasattr(channel, "set_permissions"):
+                await channel.set_permissions(mute_role, view_channel=True, send_messages=False, add_reactions=False)
 
         entry = await get_audit_executor(channel.guild, discord.AuditLogAction.channel_create, channel.id)
         creator = entry.user.mention if entry and entry.user else "Unknown"
@@ -441,7 +416,7 @@ async def on_member_ban(guild, user):
 async def on_member_unban(guild, user):
     entry = await get_audit_executor(guild, discord.AuditLogAction.unban, user.id)  
     admin_text = entry.user.mention if entry and entry.user else "Unknown"  
-    embed = make_embed("♻️️ Member Unbanned", f"**Member:** {user.mention}\n**Unbanned By:** {admin_text}", discord.Color.green())  
+    embed = make_embed("♻ Member Unbanned", f"**Member:** {user.mention}\n**Unbanned By:** {admin_text}", discord.Color.green())  
     add_user_thumbnail(embed, user)  
     await send_log(BAN_LOG_ID, embed)
 
@@ -458,7 +433,7 @@ async def on_guild_update(before, after):
     if changes:  
         entry = await get_audit_executor(after, discord.AuditLogAction.guild_update)
         editor = entry.user.mention if entry and entry.user else "Unknown"
-        embed = make_embed("⚙️ Server Updated", f"**Updated By:** {editor}\n\n" + "\n".join(changes), discord.Color.gold())  
+        embed = make_embed("⚙️️ Server Updated", f"**Updated By:** {editor}\n\n" + "\n".join(changes), discord.Color.gold())  
         if after.icon:  
             embed.set_thumbnail(url=after.icon.url)  
         await send_log(SERVER_LOG_ID, embed)
@@ -643,9 +618,12 @@ async def idchanelmute(interaction: discord.Interaction, channel_id: str):
             await interaction.response.send_message("❌ ڕۆڵی میوت بەو ئایدییە نەدۆزرایەوە!", ephemeral=True)
             return
 
-        await apply_muted_permissions(channel, mute_role)
+        if isinstance(channel, discord.VoiceChannel):
+            await channel.set_permissions(mute_role, view_channel=True, speak=False, stream=False)
+        elif hasattr(channel, "set_permissions"):
+            await channel.set_permissions(mute_role, view_channel=True, send_messages=False, add_reactions=False)
 
-        await interaction.response.send_message(f"✅ ڕۆڵی میوت بە سەرکەوتوویی بۆ هەموو مەرجەکانی کەناڵی {channel.mention} ڕێکخرا.", ephemeral=True)
+        await interaction.response.send_message(f"✅ ڕۆڵی میوت بۆ کەناڵی {channel.mention} ڕێکخرا.", ephemeral=True)
 
     except ValueError:
         await interaction.response.send_message("❌ تکایە ئایدییەکی دروست (ژمارە) بنووسە.", ephemeral=True)
