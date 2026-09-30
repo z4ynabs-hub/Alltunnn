@@ -415,10 +415,6 @@ async def apply_muted_permissions(
 ):
     try:
 
-        # =================================================
-        # ONLY TEXT / NEWS / FORUM CHANNELS
-        # =================================================
-
         if isinstance(
             channel,
             (
@@ -427,15 +423,6 @@ async def apply_muted_permissions(
                 discord.ForumChannel
             )
         ):
-
-            # IMPORTANT:
-            # ONLY Muted role is changed.
-            #
-            # @everyone is NOT changed.
-            # Log permissions are NOT changed.
-            # Staff permissions are NOT changed.
-            #
-            # Voice permissions are NOT changed.
 
             await channel.set_permissions(
                 mute_role,
@@ -460,13 +447,7 @@ async def sync_muted_permissions(
     guild,
     mute_role
 ):
-    """
-    هەموو channel ـەکانی server
-    بۆ Muted permission ـیان sync دەکات.
-    """
-
     for channel in guild.channels:
-
         await apply_muted_permissions(
             channel,
             mute_role
@@ -475,30 +456,16 @@ async def sync_muted_permissions(
 
 async def get_or_create_muted_role(guild):
 
-    # =====================================================
-    # یەکەم: بە ناوی Muted بگەڕێ
-    # =====================================================
-
     mute_role = discord.utils.get(
         guild.roles,
         name="Muted"
     )
 
-    # =====================================================
-    # ئەگەر نەبوو، خۆی دروستی بکە
-    # =====================================================
-
     if not mute_role:
-
         mute_role = await guild.create_role(
             name="Muted",
             reason="Karezma mute role"
         )
-
-    # =====================================================
-    # هەر جارێک MUTE دەکرێت
-    # هەموو CHANNEL ـەکان دوبارە ڕێکدەخرێن
-    # =====================================================
 
     await sync_muted_permissions(
         guild,
@@ -516,26 +483,16 @@ async def on_guild_channel_create(channel):
 
     try:
 
-        # =================================================
-        # ئەگەر Muted هەبێت،
-        # channel ـی نوێش permission ـی وەردەگرێت
-        # =================================================
-
         mute_role = discord.utils.get(
             channel.guild.roles,
             name="Muted"
         )
 
         if mute_role:
-
             await apply_muted_permissions(
                 channel,
                 mute_role
             )
-
-        # =================================================
-        # CHANNEL LOG
-        # =================================================
 
         entry = await get_audit_executor(
             channel.guild,
@@ -610,11 +567,6 @@ async def on_guild_channel_update(
     after
 ):
 
-    # =====================================================
-    # ئەگەر category ـی channel گۆڕا،
-    # permission ـی Muted دوبارە دابنێ
-    # =====================================================
-
     if before.category != after.category:
 
         try:
@@ -624,7 +576,6 @@ async def on_guild_channel_update(
             )
 
             if mute_role:
-
                 await apply_muted_permissions(
                     after,
                     mute_role
@@ -1126,10 +1077,6 @@ async def on_message(message):
     ):
         return
 
-    # =====================================================
-    # EXTRA MUTED PROTECTION
-    # =====================================================
-
     mute_role = discord.utils.get(
         message.guild.roles,
         name="Muted"
@@ -1154,12 +1101,7 @@ async def on_message(message):
         return
 
     parts = content.split()
-
     command = parts[0].lower()
-
-    # =====================================================
-    # SAFIKA
-    # =====================================================
 
     if command == "safika":
 
@@ -1177,7 +1119,6 @@ async def on_message(message):
             )
 
             try:
-
                 deleted = await message.channel.purge(
                     limit=amount + 1
                 )
@@ -1186,15 +1127,10 @@ async def on_message(message):
                     f"✅ `{len(deleted)}` نامە سڕایەوە.",
                     delete_after=3
                 )
-
             except Exception:
                 pass
 
         return
-
-    # =====================================================
-    # MUTE
-    # =====================================================
 
     if command == "mute":
 
@@ -1208,22 +1144,11 @@ async def on_message(message):
         if target:
 
             try:
-
-                # =================================================
-                # هەموو permission ـەکانی Muted
-                # خۆکارانە sync دەکات
-                # =================================================
-
                 mute_role = await get_or_create_muted_role(
                     message.guild
                 )
 
-                # =================================================
-                # ڕۆڵی Muted بدە بە target
-                # =================================================
-
                 if mute_role not in target.roles:
-
                     await target.add_roles(
                         mute_role,
                         reason=f"Muted by {message.author}"
@@ -1238,15 +1163,10 @@ async def on_message(message):
                     f"damt daxaa {target.mention}",
                     delete_after=2
                 )
-
             except Exception:
                 pass
 
         return
-
-    # =====================================================
-    # UNMUTE
-    # =====================================================
 
     if command == "unmute":
 
@@ -1260,7 +1180,6 @@ async def on_message(message):
         if target:
 
             try:
-
                 mute_role = discord.utils.get(
                     message.guild.roles,
                     name="Muted"
@@ -1270,7 +1189,6 @@ async def on_message(message):
                     mute_role
                     and mute_role in target.roles
                 ):
-
                     await target.remove_roles(
                         mute_role
                     )
@@ -1284,15 +1202,10 @@ async def on_message(message):
                     f"xwa xerm bnwse dllm basha aqllba amjara {target.mention}",
                     delete_after=2
                 )
-
             except Exception:
                 pass
 
         return
-
-    # =====================================================
-    # BFRA
-    # =====================================================
 
     if command == "bfra":
 
@@ -1306,7 +1219,6 @@ async def on_message(message):
         if target:
 
             try:
-
                 await target.ban()
 
                 try:
@@ -1318,15 +1230,10 @@ async def on_message(message):
                     f"✈️ Frenra {target.mention}",
                     delete_after=2
                 )
-
             except Exception:
                 pass
 
         return
-
-    # =====================================================
-    # UNBAN
-    # =====================================================
 
     if command == "unban":
 
@@ -1339,7 +1246,6 @@ async def on_message(message):
         ):
 
             try:
-
                 user = await bot.fetch_user(
                     int(parts[1])
                 )
@@ -1357,15 +1263,10 @@ async def on_message(message):
                     "✅ Unban کرا.",
                     delete_after=3
                 )
-
             except Exception:
                 pass
 
         return
-
-    # =====================================================
-    # LOCK
-    # =====================================================
 
     if command == "lock":
 
@@ -1373,7 +1274,6 @@ async def on_message(message):
             return
 
         try:
-
             await message.channel.set_permissions(
                 message.guild.default_role,
                 send_messages=False
@@ -1388,15 +1288,10 @@ async def on_message(message):
                 "🔒 کەناڵەکە Lock کرا.",
                 delete_after=3
             )
-
         except Exception:
             pass
 
         return
-
-    # =====================================================
-    # UNLOCK
-    # =====================================================
 
     if command == "unlock":
 
@@ -1404,7 +1299,6 @@ async def on_message(message):
             return
 
         try:
-
             await message.channel.set_permissions(
                 message.guild.default_role,
                 send_messages=None
@@ -1419,7 +1313,6 @@ async def on_message(message):
                 "🔓 کەناڵەکە Unlock کرا.",
                 delete_after=3
             )
-
         except Exception:
             pass
 
@@ -1429,84 +1322,7 @@ async def on_message(message):
 # 25. SLASH COMMANDS
 # =========================================================
 
-@bot.tree.command(
-    name="idchanelmute",
-    description="زیادکردنی پرێمشنی میوت بۆ کەناڵێکی دیاریکراو بە ڕێگەی ئایدی"
-)
-@app_commands.describe(
-    channel_id="ئایدی کەناڵەکە بنووسە"
-)
-async def idchanelmute(
-    interaction: discord.Interaction,
-    channel_id: str
-):
-
-    if not interaction.user.guild_permissions.administrator:
-
-        await interaction.response.send_message(
-            "❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.",
-            ephemeral=True
-        )
-
-        return
-
-    try:
-
-        channel = interaction.guild.get_channel(
-            int(channel_id)
-        )
-
-        if not channel:
-
-            await interaction.response.send_message(
-                "❌ کەناڵ بەو ئایدییە نەدۆزرایەوە لەم سەرۆکایەتییەدا!",
-                ephemeral=True
-            )
-
-            return
-
-        mute_role = discord.utils.get(
-            interaction.guild.roles,
-            name="Muted"
-        )
-
-        if not mute_role:
-
-            await interaction.response.send_message(
-                "❌ ڕۆڵی Muted نەدۆزرایەوە!",
-                ephemeral=True
-            )
-
-            return
-
-        await apply_muted_permissions(
-            channel,
-            mute_role
-        )
-
-        await interaction.response.send_message(
-            f"✅ ڕۆڵی میوت بۆ کەناڵی {channel.mention} ڕێکخرا.",
-            ephemeral=True
-        )
-
-    except ValueError:
-
-        await interaction.response.send_message(
-            "❌ تکایە ئایدییەکی دروست بنووسە.",
-            ephemeral=True
-        )
-
-    except Exception as e:
-
-        await interaction.response.send_message(
-            f"❌ هەڵەیەک ڕوویدا: {e}",
-            ephemeral=True
-        )
-
-# =========================================================
 # STAFF
-# =========================================================
-
 @bot.tree.command(
     name="staff",
     description="پێدانی ڕۆڵی ستاف بە ئەندام"
@@ -1530,16 +1346,13 @@ async def staff(
 ):
 
     if not interaction.user.guild_permissions.administrator:
-
         await interaction.response.send_message(
             "❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.",
             ephemeral=True
         )
-
         return
 
     try:
-
         role_id = (
             ROLE_BARXAKAN
             if role_choice == "barxakan"
@@ -1551,53 +1364,35 @@ async def staff(
         )
 
         if not role:
-
             await interaction.response.send_message(
                 "❌ ڕۆڵەکە لە سەرۆکایەتی نەدۆزرایەوە!",
                 ephemeral=True
             )
-
             return
 
         if role in member.roles:
-
             await interaction.response.send_message(
-                f"⚠️ {member.mention} پێشتر ئەم ڕۆڵەی هەیە (`{role.name}`).",
+                f"⚠️️ {member.mention} پێشتر ئەم ڕۆڵەی هەیە (`{role.name}`).",
                 ephemeral=True
             )
-
         else:
-
             await member.add_roles(
                 role,
                 reason=f"Staff given by {interaction.user}"
             )
-
             await interaction.response.send_message(
                 f"✅ ڕۆڵی **{role.name}** بە سەرکەوتوویی درا بە {member.mention}",
                 ephemeral=True
             )
-
     except Exception as e:
-
         await interaction.response.send_message(
             f"❌ کێشەیەک ڕوویدا: {e}",
             ephemeral=True
         )
 
-# =========================================================
 # COLOR ROLE
-# =========================================================
-
-class ColorRoleSelect(
-    discord.ui.Select
-):
-
-    def __init__(
-        self,
-        roles_data
-    ):
-
+class ColorRoleSelect(discord.ui.Select):
+    def __init__(self, roles_data):
         options = [
             discord.SelectOption(
                 label=f"{role.name} [{status}]",
@@ -1605,7 +1400,6 @@ class ColorRoleSelect(
             )
             for role, status in roles_data[:25]
         ]
-
         super().__init__(
             placeholder="ڕۆڵێک هەڵبژێرە بۆ گۆڕینی ڕەنگ...",
             min_values=1,
@@ -1613,18 +1407,12 @@ class ColorRoleSelect(
             options=options
         )
 
-    async def callback(
-        self,
-        interaction: discord.Interaction
-    ):
-
+    async def callback(self, interaction: discord.Interaction):
         if interaction.user.id in RESTRICTED_COLOR_USERS:
-
             await interaction.response.send_message(
                 "❌ قەدەغە کراوەی!",
                 ephemeral=True
             )
-
             return
 
         role = interaction.guild.get_role(
@@ -1632,17 +1420,12 @@ class ColorRoleSelect(
         )
 
         if role:
-
             await interaction.response.send_modal(
                 ColorModal(role)
             )
 
 
-class ColorModal(
-    discord.ui.Modal,
-    title="گۆڕینی ڕەنگی ڕۆڵ"
-):
-
+class ColorModal(discord.ui.Modal, title="گۆڕینی ڕەنگی ڕۆڵ"):
     color_input = discord.ui.TextInput(
         label="کۆدی ڕەنگ (#FF0000)",
         placeholder="#HEX",
@@ -1650,20 +1433,12 @@ class ColorModal(
         max_length=7
     )
 
-    def __init__(
-        self,
-        role
-    ):
+    def __init__(self, role):
         super().__init__()
         self.role = role
 
-    async def on_submit(
-        self,
-        interaction: discord.Interaction
-    ):
-
+    async def on_submit(self, interaction: discord.Interaction):
         try:
-
             color_obj = discord.Color(
                 int(
                     self.color_input.value
@@ -1681,9 +1456,7 @@ class ColorModal(
                 "✅ ڕەنگەکە گۆڕدرا!",
                 ephemeral=True
             )
-
         except Exception as e:
-
             await interaction.response.send_message(
                 f"❌ هەڵە: {e}",
                 ephemeral=True
@@ -1694,17 +1467,12 @@ class ColorModal(
     name="rangirole",
     description="گۆڕینی ڕەنگی ڕۆڵەکان"
 )
-async def rangirole(
-    interaction: discord.Interaction
-):
-
+async def rangirole(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
-
         await interaction.response.send_message(
             "❌ تەنها ئەدیمین.",
             ephemeral=True
         )
-
         return
 
     roles_data = [
@@ -1714,12 +1482,7 @@ async def rangirole(
     ]
 
     view = discord.ui.View()
-
-    view.add_item(
-        ColorRoleSelect(
-            roles_data
-        )
-    )
+    view.add_item(ColorRoleSelect(roles_data))
 
     await interaction.response.send_message(
         "🎨 **ڕۆڵێک هەڵبژێرە:**",
@@ -1737,7 +1500,6 @@ async def regri(
     member: discord.Member,
     action: str
 ):
-
     if not (
         interaction.guild.owner_id == interaction.user.id
         or any(
@@ -1745,34 +1507,20 @@ async def regri(
             for r in interaction.user.roles
         )
     ):
-
         await interaction.response.send_message(
             "❌ دەسەڵاتت نییە.",
             ephemeral=True
         )
-
         return
 
-    if action.lower() in [
-        "add",
-        "ban"
-    ]:
-
-        RESTRICTED_COLOR_USERS.add(
-            member.id
-        )
-
+    if action.lower() in ["add", "ban"]:
+        RESTRICTED_COLOR_USERS.add(member.id)
         await interaction.response.send_message(
             f"🚫 قەدەغەکرا {member.mention}",
             ephemeral=True
         )
-
     else:
-
-        RESTRICTED_COLOR_USERS.discard(
-            member.id
-        )
-
+        RESTRICTED_COLOR_USERS.discard(member.id)
         await interaction.response.send_message(
             f"✅ ڕێگەدرا بە {member.mention}",
             ephemeral=True
@@ -1782,9 +1530,7 @@ async def regri(
 # 26. RUN BOT
 # =========================================================
 
-TOKEN = os.getenv(
-    "DISCORD_TOKEN"
-)
+TOKEN = os.getenv("DISCORD_TOKEN")
 
 if TOKEN:
     bot.run(TOKEN)
