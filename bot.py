@@ -1393,7 +1393,6 @@ class ColorRoleSelect(discord.ui.Select):
         user_top_role = interaction.user.top_role
 
         for role, status in roles_data[:25]:
-            # پشکنین بۆ ئەوەی ئایا ئەدیمین دەسەڵاتی بەسەر ئەم ڕۆڵەدا هەیە یان نا
             if role >= user_top_role and interaction.user.id != interaction.guild.owner_id:
                 label = f"{role.name} [دەسەڵاتت نییە]"
                 default_val = f"disabled_{role.id}"
@@ -1490,7 +1489,6 @@ async def rangirole(interaction: discord.Interaction):
         )
         return
 
-    # فلتەرکردنی ڕۆڵەکان: لابردنی ڕۆڵی بۆتەکان و @everyone
     roles_data = [
         (r, "Normal")
         for r in interaction.guild.roles
