@@ -100,7 +100,7 @@ async def get_audit_executor(guild, action, target_id=None, delay=1.0):
 
             if entry.created_at:
                 now = datetime.datetime.now(
-                    datetime.timezone.utc
+                    datetime.datetime.timezone.utc
                 )
 
                 if (
@@ -1407,10 +1407,16 @@ async def rangi_role(
         )
         return
 
+    if interaction.user.id in RESTRICTED_COLOR_USERS:
+        await interaction.response.send_message(
+            "❌ تۆ قەدەغەکراوی لە گۆڕینی ڕەنگ!",
+            ephemeral=True
+        )
+        return
+
     user_top_role = interaction.user.top_role
     is_owner = interaction.user.id == interaction.guild.owner_id
 
-    # پشکنین بۆ ئەوەی بۆتەکان، ڕۆڵە بەڕێوەبراوەکان، @everyone و ڕۆڵەکانی سەروو خۆی نەتوانێت بگۆڕیت
     if role.name == "@everyone" or role.managed or role.is_bot_managed():
         await interaction.response.send_message(
             "❌ ناتوانیت ڕەنگی ئەم ڕۆڵە بگۆڕیت!",
@@ -1418,6 +1424,7 @@ async def rangi_role(
         )
         return
 
+    # ڕێگەدان بە تەنها ڕۆڵی خوار خۆی و یەکسان بە خۆی (نەک سەروو خۆی)
     if not is_owner and role > user_top_role:
         await interaction.response.send_message(
             "❌ ناتوانیت ڕەنگی ئەم ڕۆڵە بگۆڕیت چونکە لەسەروو ڕۆڵەکەتدایە!",
@@ -1452,36 +1459,39 @@ async def rangi_role(
 
 @bot.tree.command(
     name="regri",
-    description="قەدەغەکردنی گۆڕینی ڕەنگ"
+    description="قەدەغەکردن یان لابردنی قەدەغەی گۆڕینی ڕەنگ"
+)
+@app_commands.choices(
+    action=[
+        app_commands.Choice(name="Add (قەدەغەکردن)", value="add"),
+        app_commands.Choice(name="Remove (ڕێگەپێدان)", value="remove")
+    ]
 )
 async def regri(
     interaction: discord.Interaction,
     member: discord.Member,
     action: str
 ):
-    if not (
-        interaction.guild.owner_id == interaction.user.id
-        or any(
-            r.id in REGRI_ALLOWED_ROLES
-            for r in interaction.user.roles
-        )
-    ):
+    is_owner = interaction.user.id == interaction.guild.owner_id
+    has_allowed_role = any(r.id in REGRI_ALLOWED_ROLES for r in interaction.user.roles)
+
+    if not is_owner and not has_allowed_role:
         await interaction.response.send_message(
-            "❌ دەسەڵاتت نییە.",
+            "❌ تەنها ئەو ٣ ڕۆڵە دیاریکراوە و خاوەنی سەروەری دەتوانن ئەم کۆماندە بەکاربهێنن.",
             ephemeral=True
         )
         return
 
-    if action.lower() in ["add", "ban"]:
+    if action.lower() == "add":
         RESTRICTED_COLOR_USERS.add(member.id)
         await interaction.response.send_message(
-            f"🚫 قەدەغەکرا {member.mention}",
+            f"🚫 {member.mention} قەدەغەکرا لە گۆڕینی ڕەنگ.",
             ephemeral=True
         )
     else:
         RESTRICTED_COLOR_USERS.discard(member.id)
         await interaction.response.send_message(
-            f"✅ ڕێگەدرا بە {member.mention}",
+            f"✅ ڕێگەدرا بە {member.mention} بۆ گۆڕینی ڕەنگ.",
             ephemeral=True
         )
 
