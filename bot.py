@@ -4,11 +4,9 @@ import datetime
 import os
 import asyncio
 
-=========================================================
-
-1. BOT SETTINGS
-
-=========================================================
+# =========================================================
+# 1. BOT SETTINGS
+# =========================================================
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -24,11 +22,9 @@ bot = commands.Bot(
 # Global dictionary to manage color change restrictions via /regri
 RESTRICTED_COLOR_USERS = set()
 
-=========================================================
-
-2. IDs
-
-=========================================================
+# =========================================================
+# 2. IDs
+# =========================================================
 
 WELCOME_CHANNEL_ID = 863844473851215893
 
@@ -51,11 +47,9 @@ REGRI_ALLOWED_ROLES = {
     863846779921629216
 }
 
-=========================================================
-
-3. LOG HELPERS
-
-=========================================================
+# =========================================================
+# 3. LOG HELPERS
+# =========================================================
 
 def get_log_channel(channel_id):
     return bot.get_channel(channel_id)
@@ -88,11 +82,9 @@ def add_user_thumbnail(embed, user):
     except Exception:
         pass
 
-=========================================================
-
-4. AUDIT LOG HELPER
-
-=========================================================
+# =========================================================
+# 4. AUDIT LOG HELPER
+# =========================================================
 
 async def get_audit_executor(guild, action, target_id=None, delay=1.0):
     try:  
@@ -115,11 +107,9 @@ async def get_audit_executor(guild, action, target_id=None, delay=1.0):
         print(f"Audit log error: {e}")  
     return None
 
-=========================================================
-
-5. READY
-
-=========================================================
+# =========================================================
+# 5. READY
+# =========================================================
 
 @bot.event
 async def on_ready():
@@ -141,11 +131,9 @@ async def on_ready():
     add_user_thumbnail(embed, bot.user)  
     await send_log(SERVER_LOG_ID, embed)
 
-=========================================================
-
-6. WELCOME
-
-=========================================================
+# =========================================================
+# 6. WELCOME
+# =========================================================
 
 @bot.event
 async def on_member_join(member):
@@ -174,11 +162,9 @@ async def on_member_join(member):
     add_user_thumbnail(embed, member)  
     await send_log(MEMBER_LOG_ID, embed)
 
-=========================================================
-
-7. MEMBER LEFT
-
-=========================================================
+# =========================================================
+# 7. MEMBER LEFT
+# =========================================================
 
 @bot.event
 async def on_member_remove(member):
@@ -192,11 +178,9 @@ async def on_member_remove(member):
     add_user_thumbnail(embed, member)  
     await send_log(LEFT_LOG_ID, embed)
 
-=========================================================
-
-8. MEMBER UPDATE
-
-=========================================================
+# =========================================================
+# 8. MEMBER UPDATE
+# =========================================================
 
 @bot.event
 async def on_member_update(before, after):
@@ -251,11 +235,9 @@ async def on_member_update(before, after):
         add_user_thumbnail(embed, after)  
         await send_log(MEMBER_LOG_ID, embed)
 
-=========================================================
-
-9. GET TARGET FROM TAG OR REPLY
-
-=========================================================
+# =========================================================
+# 9. GET TARGET FROM TAG OR REPLY
+# =========================================================
 
 async def get_target_member(message):
     if message.mentions:  
@@ -274,11 +256,9 @@ async def get_target_member(message):
             print(f"Reply target error: {repr(e)}")  
     return None
 
-=========================================================
-
-10. MUTED ROLE
-
-=========================================================
+# =========================================================
+# 10. MUTED ROLE
+# =========================================================
 
 async def apply_muted_permissions(channel, mute_role):
     try:  
@@ -311,11 +291,9 @@ async def get_or_create_muted_role(guild):
         await apply_muted_permissions(channel, mute_role)  
     return mute_role
 
-=========================================================
-
-11 & 12. CHANNEL CREATE LOG
-
-=========================================================
+# =========================================================
+# 11 & 12. CHANNEL CREATE LOG
+# =========================================================
 
 @bot.event
 async def on_guild_channel_create(channel):
@@ -340,11 +318,9 @@ async def on_guild_channel_create(channel):
     except Exception as e:  
         print(f"New channel error: {e}")
 
-=========================================================
-
-13. CHANNEL DELETE LOG
-
-=========================================================
+# =========================================================
+# 13. CHANNEL DELETE LOG
+# =========================================================
 
 @bot.event
 async def on_guild_channel_delete(channel):
@@ -361,11 +337,9 @@ async def on_guild_channel_delete(channel):
     )  
     await send_log(CHANNEL_LOG_ID, embed)
 
-=========================================================
-
-14. CHANNEL UPDATE LOG
-
-=========================================================
+# =========================================================
+# 14. CHANNEL UPDATE LOG
+# =========================================================
 
 @bot.event
 async def on_guild_channel_update(before, after):
@@ -393,11 +367,9 @@ async def on_guild_channel_update(before, after):
         )  
         await send_log(CHANNEL_LOG_ID, embed)
 
-=========================================================
-
-15. ROLE CREATE
-
-=========================================================
+# =========================================================
+# 15. ROLE CREATE
+# =========================================================
 
 @bot.event
 async def on_guild_role_create(role):
@@ -417,11 +389,9 @@ async def on_guild_role_create(role):
     )  
     await send_log(ROLE_LOG_ID, embed)
 
-=========================================================
-
-16. ROLE DELETE
-
-=========================================================
+# =========================================================
+# 16. ROLE DELETE
+# =========================================================
 
 @bot.event
 async def on_guild_role_delete(role):
@@ -440,11 +410,9 @@ async def on_guild_role_delete(role):
     )  
     await send_log(ROLE_LOG_ID, embed)
 
-=========================================================
-
-17. ROLE UPDATE
-
-=========================================================
+# =========================================================
+# 17. ROLE UPDATE
+# =========================================================
 
 @bot.event
 async def on_guild_role_update(before, after):
@@ -477,11 +445,9 @@ async def on_guild_role_update(before, after):
         )  
         await send_log(ROLE_LOG_ID, embed)
 
-=========================================================
-
-18. VOICE LOG
-
-=========================================================
+# =========================================================
+# 18. VOICE LOG
+# =========================================================
 
 @bot.event
 async def on_voice_state_update(member, before, after):
@@ -518,11 +484,9 @@ async def on_voice_state_update(member, before, after):
         add_user_thumbnail(embed, member)  
         await send_log(VOICE_LOG_ID, embed)
 
-=========================================================
-
-19. BAN LOG
-
-=========================================================
+# =========================================================
+# 19. BAN LOG
+# =========================================================
 
 @bot.event
 async def on_member_ban(guild, user):
@@ -541,11 +505,9 @@ async def on_member_ban(guild, user):
     add_user_thumbnail(embed, user)  
     await send_log(BAN_LOG_ID, embed)
 
-=========================================================
-
-20. UNBAN LOG
-
-=========================================================
+# =========================================================
+# 20. UNBAN LOG
+# =========================================================
 
 @bot.event
 async def on_member_unban(guild, user):
@@ -564,11 +526,9 @@ async def on_member_unban(guild, user):
     add_user_thumbnail(embed, user)  
     await send_log(BAN_LOG_ID, embed)
 
-=========================================================
-
-21. SERVER UPDATE
-
-=========================================================
+# =========================================================
+# 21. SERVER UPDATE
+# =========================================================
 
 @bot.event
 async def on_guild_update(before, after):
@@ -597,11 +557,9 @@ async def on_guild_update(before, after):
             embed.set_thumbnail(url=after.icon.url)  
         await send_log(SERVER_LOG_ID, embed)
 
-=========================================================
-
-22. MESSAGE DELETE LOG
-
-=========================================================
+# =========================================================
+# 22. MESSAGE DELETE LOG
+# =========================================================
 
 @bot.event
 async def on_message_delete(message):
@@ -627,11 +585,9 @@ async def on_message_delete(message):
     add_user_thumbnail(embed, message.author)  
     await send_log(CHAT_LOG_ID, embed)
 
-=========================================================
-
-23. MESSAGE EDIT
-
-=========================================================
+# =========================================================
+# 23. MESSAGE EDIT
+# =========================================================
 
 @bot.event
 async def on_message_edit(before, after):
@@ -655,11 +611,9 @@ async def on_message_edit(before, after):
     add_user_thumbnail(embed, after.author)  
     await send_log(CHAT_LOG_ID, embed)
 
-=========================================================
-
-24. MAIN COMMAND SYSTEM (PREFIX COMMANDS)
-
-=========================================================
+# =========================================================
+# 24. MAIN COMMAND SYSTEM (PREFIX COMMANDS)
+# =========================================================
 
 @bot.event
 async def on_message(message):
@@ -854,16 +808,14 @@ async def on_message(message):
             print(f"Unlock error: {e}")  
         return
 
-=========================================================
-
-25. SLASH COMMANDS (/rangirole & /regri)
-
-=========================================================
+# =========================================================
+# 25. SLASH COMMANDS (/rangirole & /regri)
+# =========================================================
 
 class ColorRoleSelect(discord.ui.Select):
     def __init__(self, roles_data):
         options = []
-        for role, status_text in roles_data[:25]: # Discord select limit
+        for role, status_text in roles_data[:25]:
             options.append(
                 discord.SelectOption(
                     label=f"{role.name} [{status_text}]",
@@ -872,7 +824,7 @@ class ColorRoleSelect(discord.ui.Select):
             )
         super().__init__(placeholder="ڕۆڵێک هەڵبژێرە بۆ گۆڕینی ڕەنگ...", min_values=1, max_values=1, options=options)
 
-    async def callback(self, interaction: discord.ui.View):
+    async def callback(self, interaction: discord.Interaction):
         if interaction.user.id in RESTRICTED_COLOR_USERS:
             await interaction.response.send_message("❌ تۆ لەلایەن بەڕێوەبەرەوە قەدەغە کراوەی لە دەستکاریکردنی ڕەنگەکان!", ephemeral=True)
             return
@@ -883,13 +835,11 @@ class ColorRoleSelect(discord.ui.Select):
             await interaction.response.send_message("❌ ڕۆڵەکە نەدۆزرایەوە.", ephemeral=True)
             return
 
-        # Check hierarchy
         user_top = interaction.user.top_role.position
         if role >= interaction.guild.me.top_role or (role.position >= user_top and interaction.guild.owner != interaction.user):
             await interaction.response.send_message("❌ ناتوانیت دەستکاری ئەم ڕۆڵە بکەیت چونکە لە سەرووی ئاستی تۆوەیە!", ephemeral=True)
             return
 
-        # Prompt user to provide a hex code or color
         modal = ColorModal(role)
         await interaction.response.send_modal(modal)
 
@@ -930,16 +880,15 @@ async def rangirole(interaction: discord.Interaction):
         if role.name == "@everyone":
             continue
         
-        # Determine status
         is_above = role.position > user_top and interaction.guild.owner != interaction.user
         has_role = role in interaction.user.roles
         
         if is_above:
-            status = "ناتوانیت دەستکاری بکەیت (بەرزترە)"
+            status = "ناتوانیت دەستکاری بکەیت"
         elif has_role:
-            status = "ڕۆڵی خۆتە (دەتوانیت دەستکاری بکەیت)"
+            status = "ڕۆڵی خۆتە"
         else:
-            status = "لە خوار ئاستی تۆیە (دەتوانیت دەستکاری بکەیت)"
+            status = "لە خوار ئاستی تۆیە"
 
         roles_data.append((role, status))
 
@@ -950,10 +899,8 @@ async def rangirole(interaction: discord.Interaction):
     view = ColorRoleView(roles_data)
     await interaction.response.send_message("🎨 **لیستی ڕۆڵەکانی سێرڤەر بۆ گۆڕینی ڕەنگ:**\nڕۆڵێک لە خوارەوە هەڵبژێرە:", view=view, ephemeral=True)
 
-
 @bot.tree.command(name="regri", description="قەدەغەکردن یان کردنەوەی دەستکاریکردنی ڕەنگ بۆ بەکارهێنەرێک")
 async def regri(interaction: discord.Interaction, member: discord.Member, action: str):
-    # Check permissions (Owner or specific roles)
     is_owner = interaction.guild.owner_id == interaction.user.id
     has_allowed_role = any(r.id in REGRI_ALLOWED_ROLES for r in interaction.user.roles)
 
@@ -971,11 +918,9 @@ async def regri(interaction: discord.Interaction, member: discord.Member, action
     else:
         await interaction.response.send_message("❌ تکایە کردارێکی دروست بنووسە (نموونە: `add` یان `remove`).", ephemeral=True)
 
-=========================================================
-
-26. ERROR HANDLER
-
-=========================================================
+# =========================================================
+# 26. ERROR HANDLER
+# =========================================================
 
 @bot.event
 async def on_command_error(ctx, error):
@@ -983,11 +928,9 @@ async def on_command_error(ctx, error):
         return  
     print(f"Command error: {repr(error)}")
 
-=========================================================
-
-27. RUN BOT
-
-=========================================================
+# =========================================================
+# 27. RUN BOT
+# =========================================================
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 if not TOKEN:
