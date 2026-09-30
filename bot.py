@@ -491,22 +491,37 @@ async def on_message(message):
     parts = content.split()  
     command = parts[0].lower()  
 
-    # STAFF
+    # STAFF COMMAND
     if command == "staff":
         if not message.author.guild_permissions.administrator:
+            await message.channel.send(f"❌ {message.author.mention} تەنها ئەدمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.", delete_after=5)
             return
+
         target = await get_target_member(message)
-        if target:
+        if target is None:
+            await message.channel.send("❌ کەسێک Tag بکە یان Reply ـی نامەکەی بکە و بنووسە `staff`.", delete_after=5)
+            return
+
+        try:
             r1 = message.guild.get_role(STAFF_ROLE_1)
             r2 = message.guild.get_role(STAFF_ROLE_2)
-            roles = [r for r in [r1, r2] if r and r not in target.roles]
-            if roles:
-                await target.add_roles(*roles)
+            
+            roles_to_add = []
+            if r1 and r1 not in target.roles: roles_to_add.append(r1)
+            if r2 and r2 not in target.roles: roles_to_add.append(r2)
+
+            if roles_to_add:
+                await target.add_roles(*roles_to_add, reason=f"Staff given by {message.author}")
+
             try:
                 await message.delete()
             except Exception:
                 pass
-            await message.channel.send(f"✅ ڕۆڵ درا بە {target.mention}", delete_after=3)
+
+            await message.channel.send(f"✅ دوو ڕۆڵی ستاف بە سەرکەوتوویی درا بە {target.mention}", delete_after=3)
+        except Exception as e:
+            print(f"Staff command error: {e}")
+            await message.channel.send("❌ کێشەیەک ڕوویدا لە پێدانی ڕۆڵەکان.", delete_after=5)
         return
 
     # SAFIKA (PURGE)
