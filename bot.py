@@ -320,7 +320,7 @@ async def on_guild_channel_update(before, after):
         editor = entry.user.mention if entry and entry.user else "Unknown"
 
         embed = make_embed(  
-            "✏️️ Channel Updated",  
+            "✏ Channel Updated",  
             f"**Channel:** {after.mention}\n**ID:** `{after.id}`\n**Updated By:** {editor}\n\n" + "\n".join(changes),  
             discord.Color.gold()  
         )  
@@ -610,6 +610,50 @@ async def on_message(message):
 # =========================================================
 # 25. SLASH COMMANDS
 # =========================================================
+
+# --- ID CHANNEL MUTE SLASH COMMAND ---
+@bot.tree.command(name="idchanelmute", description="زیادکردنی پرێمشنی میوت بۆ کەناڵێکی دیاریکراو بە ڕێگەی ئایدی")
+@app_commands.describe(channel_id="ئایدی کەناڵەکە بنووسە")
+async def idchanelmute(interaction: discord.Interaction, channel_id: str):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True)
+        return
+
+    try:
+        channel = interaction.guild.get_channel(int(channel_id))
+        if not channel:
+            await interaction.response.send_message("❌ کەناڵ بەو ئایدییە نەدۆزرایەوە لەم سەرۆکایەتییەدا!", ephemeral=True)
+            return
+
+        mute_role = interaction.guild.get_role(1058553204251578389)
+        if not mute_role:
+            await interaction.response.send_message("❌ ڕۆڵی میوت بەو ئایدییە نەدۆزرایەوە!", ephemeral=True)
+            return
+
+        if isinstance(channel, (discord.TextChannel, discord.NewsChannel, discord.ForumChannel)):
+            await channel.set_permissions(
+                mute_role,
+                send_messages=False,
+                add_reactions=False,
+                send_messages_in_threads=False,
+                create_public_threads=False,
+                create_private_threads=False,
+                reason="Manual mute permission applied via /idchanelmute"
+            )
+        elif isinstance(channel, discord.VoiceChannel):
+            await channel.set_permissions(
+                mute_role,
+                speak=False,
+                stream=False,
+                reason="Manual mute permission applied via /idchanelmute"
+            )
+
+        await interaction.response.send_message(f"✅ ڕۆڵی میوت بە سەرکەوتوویی لە کەناڵی {channel.mention} بۆ ئەم مەبەستە ڕێکخرا.", ephemeral=True)
+
+    except ValueError:
+        await interaction.response.send_message("❌ تکایە ئایدییەکی دروست (ژمارە) بنووسە.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"❌ هەڵەیەک ڕوویدا: {e}", ephemeral=True)
 
 # --- STAFF SLASH COMMAND WITH CHOICE ---
 @bot.tree.command(name="staff", description="پێدانی ڕۆڵی ستاف بە ئەندام")
