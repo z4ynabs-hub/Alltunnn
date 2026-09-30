@@ -1390,20 +1390,12 @@ async def staff(
 class ColorRoleSelect(discord.ui.Select):
     def __init__(self, interaction: discord.Interaction, roles_data):
         options = []
-        user_top_role = interaction.user.top_role
 
         for role, status in roles_data[:25]:
-            if role >= user_top_role and interaction.user.id != interaction.guild.owner_id:
-                label = f"{role.name} [دەسەڵاتت نییە]"
-                default_val = f"disabled_{role.id}"
-            else:
-                label = f"{role.name} [{status}]"
-                default_val = str(role.id)
-
             options.append(
                 discord.SelectOption(
-                    label=label,
-                    value=default_val
+                    label=f"{role.name} [{status}]",
+                    value=str(role.id)
                 )
             )
 
@@ -1423,14 +1415,6 @@ class ColorRoleSelect(discord.ui.Select):
             return
 
         selected_value = self.values[0]
-
-        if selected_value.startswith("disabled_"):
-            await interaction.response.send_message(
-                "❌ ناتوانیت ڕەنگی ئەم ڕۆڵە بگۆڕیت چونکە لەسەروو یان یەکسانە بە ڕۆڵەکەت!",
-                ephemeral=True
-            )
-            return
-
         role = interaction.guild.get_role(int(selected_value))
 
         if role:
@@ -1472,7 +1456,7 @@ class ColorModal(discord.ui.Modal, title="گۆڕینی ڕەنگی ڕۆڵ"):
             )
         except Exception as e:
             await interaction.response.send_message(
-                f"❌ هەڵە: {e}",
+                `❌ هەڵە: {e}`,
                 ephemeral=True
             )
 
@@ -1489,11 +1473,27 @@ async def rangirole(interaction: discord.Interaction):
         )
         return
 
-    roles_data = [
-        (r, "Normal")
-        for r in interaction.guild.roles
-        if r.name != "@everyone" and not r.managed
-    ]
+    user_top_role = interaction.user.top_role
+    is_owner = interaction.user.id == interaction.guild.owner_id
+
+    # تەنها ئەو ڕۆڵانە دەهێڵینەوە کە لەسەر ئاستی خۆت یان خوار خۆتن، بۆتەکان و @everyone لادەبەین
+    roles_data = []
+    for r in interaction.guild.roles:
+        if r.name == "@everyone" or r.managed or r.bot_id:
+            continue
+        
+        # ئەگەر خاوەن سێرڤەر نەبوو، نابێت ڕۆڵەکانی سەروو خۆی ببینێت
+        if not is_owner and r > user_top_role:
+            continue
+
+        roles_data.append((r, "Normal"))
+
+    if not roles_data:
+        await interaction.response.send_message(
+            "❌ هیچ ڕۆڵێک نییە کە دەسەڵاتت هەبێت دەستکاری بکەیت.",
+            ephemeral=True
+        )
+        return
 
     view = discord.ui.View()
     view.add_item(ColorRoleSelect(interaction, roles_data))
