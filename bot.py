@@ -226,7 +226,7 @@ async def get_target_member(message):
     return None
 
 # =========================================================
-# 10. MUTED ROLE
+# 10. MUTED ROLE (UPDATED)
 # =========================================================
 
 async def apply_muted_permissions(channel, mute_role):
@@ -244,8 +244,9 @@ async def apply_muted_permissions(channel, mute_role):
         elif isinstance(channel, discord.VoiceChannel):  
             await channel.set_permissions(  
                 mute_role,  
-                speak=False,  
-                stream=False,  
+                speak=True,  
+                stream=True,  
+                connect=True,  
                 reason="Karezma Muted role"  
             )  
     except Exception:
@@ -253,9 +254,8 @@ async def apply_muted_permissions(channel, mute_role):
 
 async def get_or_create_muted_role(guild):
     mute_role = discord.utils.get(guild.roles, name="Muted")  
-    if mute_role:  
-        return mute_role  
-    mute_role = await guild.create_role(name="Muted", reason="Karezma mute role")  
+    if not mute_role:  
+        mute_role = await guild.create_role(name="Muted", reason="Karezma mute role")  
     for channel in guild.channels:  
         await apply_muted_permissions(channel, mute_role)  
     return mute_role
