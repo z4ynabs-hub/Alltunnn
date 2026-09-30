@@ -37,8 +37,8 @@ ROLE_LOG_ID = 867085174662889503
 MEMBER_LOG_ID = 867085715787612220
 NICKNAME_LOG_ID = 867085807445213215
 
-STAFF_ROLE_1 = 995343531482812488
-STAFF_ROLE_2 = 863850042123878421
+ROLE_BARXAKAN = 864962613582102560
+ROLE_MSHAXOR = 863850042123878421
 
 REGRI_ALLOWED_ROLES = {
     1548633166531530802,
@@ -610,28 +610,31 @@ async def on_message(message):
 # 25. SLASH COMMANDS
 # =========================================================
 
-# --- STAFF SLASH COMMAND ---
-@bot.tree.command(name="staff", description="پێدانی ڕۆڵەکانی ستاف بە ئەندام")
-async def staff(interaction: discord.Interaction, member: discord.Member):
+# --- STAFF SLASH COMMAND WITH CHOICE ---
+@bot.tree.command(name="staff", description="پێدانی ڕۆڵی ستاف بە ئەندام")
+@discord.app.choices(role_choice=[
+    discord.app.Choice(name="Barxakan🐑", value="barxakan"),
+    discord.app.Choice(name="mshaxor", value="mshaxor")
+])
+async def staff(interaction: discord.Interaction, member: discord.Member, role_choice: str):
     if not interaction.user.guild_permissions.administrator:
         await interaction.response.send_message("❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True)
         return
 
     try:
-        r1 = interaction.guild.get_role(STAFF_ROLE_1)
-        r2 = interaction.guild.get_role(STAFF_ROLE_2)
-        
-        roles_to_add = []
-        if r1 and r1 not in member.roles: 
-            roles_to_add.append(r1)
-        if r2 and r2 not in member.roles: 
-            roles_to_add.append(r2)
+        role_id = ROLE_BARXAKAN if role_choice == "barxakan" else ROLE_MSHAXOR
+        role = interaction.guild.get_role(role_id)
 
-        if roles_to_add:
-            await member.add_roles(*roles_to_add, reason=f"Staff given by {interaction.user}")
-            await interaction.response.send_message(f"✅ دوو ڕۆڵی ستاف بە سەرکەوتوویی درا بە {member.mention}", ephemeral=True)
+        if not role:
+            await interaction.response.send_message("❌ ڕۆڵەکە لە سەرۆکایەتی (Server) نەدۆزرایەوە!", ephemeral=True)
+            return
+
+        if role in member.roles:
+            await interaction.response.send_message(f"⚠️ {member.mention} پێشتر ئەم ڕۆڵەی هەیە (`{role.name}`).", ephemeral=True)
         else:
-            await interaction.response.send_message(f"⚠️ {member.mention} پێشتر هەردوو ڕۆڵەکەی هەیە یان ڕۆڵەکان نەدۆزرانەوە.", ephemeral=True)
+            await member.add_roles(role, reason=f"Staff given by {interaction.user}")
+            await interaction.response.send_message(f"✅ ڕۆڵی **{role.name}** بە سەرکەوتوویی درا بە {member.mention}", ephemeral=True)
+            
     except Exception as e:
         await interaction.response.send_message(f"❌ کێشەیەک ڕوویدا: {e}", ephemeral=True)
 
