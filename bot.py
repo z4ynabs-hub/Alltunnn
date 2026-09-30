@@ -126,10 +126,6 @@ async def on_ready():
     except Exception:
         pass
 
-    # =====================================================
-    # MUTED PERMISSION SYNC AFTER BOT STARTS
-    # =====================================================
-
     for guild in bot.guilds:
         try:
             mute_role = discord.utils.get(
@@ -207,9 +203,9 @@ async def on_member_join(member):
 async def on_member_remove(member):
     embed = make_embed(
         "📤 Member Left",
-        f"**Member:** {member.mention}\n"
-        f"**Username:** `{member}`\n"
-        f"**ID:** `{member.id}`",
+        f"Member: {member.mention}\n"
+        f"Username: {member}\n"
+        f"ID: {member.id}",
         discord.Color.red()
     )
 
@@ -1372,7 +1368,7 @@ async def staff(
 
         if role in member.roles:
             await interaction.response.send_message(
-                f"⚠️️ {member.mention} پێشتر ئەم ڕۆڵەی هەیە (`{role.name}`).",
+                f"⚠ {member.mention} پێشتر ئەم ڕۆڵەی هەیە (`{role.name}`).",
                 ephemeral=True
             )
         else:
@@ -1390,16 +1386,28 @@ async def staff(
             ephemeral=True
         )
 
-# COLOR ROLE
+# COLOR ROLE SYSTEM
 class ColorRoleSelect(discord.ui.Select):
-    def __init__(self, roles_data):
-        options = [
-            discord.SelectOption(
-                label=f"{role.name} [{status}]",
-                value=str(role.id)
+    def __init__(self, interaction: discord.Interaction, roles_data):
+        options = []
+        user_top_role = interaction.user.top_role
+
+        for role, status in roles_data[:25]:
+            # پشکنین بۆ ئەوەی ئایا ئەدیمین دەسەڵاتی بەسەر ئەم ڕۆڵەدا هەیە یان نا
+            if role >= user_top_role and interaction.user.id != interaction.guild.owner_id:
+                label = f"{role.name} [دەسەڵاتت نییە]"
+                default_val = f"disabled_{role.id}"
+            else:
+                label = f"{role.name} [{status}]"
+                default_val = str(role.id)
+
+            options.append(
+                discord.SelectOption(
+                    label=label,
+                    value=default_val
+                )
             )
-            for role, status in roles_data[:25]
-        ]
+
         super().__init__(
             placeholder="ڕۆڵێک هەڵبژێرە بۆ گۆڕینی ڕەنگ...",
             min_values=1,
@@ -1415,9 +1423,16 @@ class ColorRoleSelect(discord.ui.Select):
             )
             return
 
-        role = interaction.guild.get_role(
-            int(self.values[0])
-        )
+        selected_value = self.values[0]
+
+        if selected_value.startswith("disabled_"):
+            await interaction.response.send_message(
+                "❌ ناتوانیت ڕەنگی ئەم ڕۆڵە بگۆڕیت چونکە لەسەروو یان یەکسانە بە ڕۆڵەکەت!",
+                ephemeral=True
+            )
+            return
+
+        role = interaction.guild.get_role(int(selected_value))
 
         if role:
             await interaction.response.send_modal(
@@ -1475,14 +1490,15 @@ async def rangirole(interaction: discord.Interaction):
         )
         return
 
+    # فلتەرکردنی ڕۆڵەکان: لابردنی ڕۆڵی بۆتەکان و @everyone
     roles_data = [
         (r, "Normal")
         for r in interaction.guild.roles
-        if r.name != "@everyone"
+        if r.name != "@everyone" and not r.managed
     ]
 
     view = discord.ui.View()
-    view.add_item(ColorRoleSelect(roles_data))
+    view.add_item(ColorRoleSelect(interaction, roles_data))
 
     await interaction.response.send_message(
         "🎨 **ڕۆڵێک هەڵبژێرە:**",
