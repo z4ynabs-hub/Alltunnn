@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 import datetime
 import os
@@ -430,7 +431,7 @@ async def on_member_ban(guild, user):
 async def on_member_unban(guild, user):
     entry = await get_audit_executor(guild, discord.AuditLogAction.unban, user.id)  
     admin_text = entry.user.mention if entry and entry.user else "Unknown"  
-    embed = make_embed("♻️ Member Unbanned", f"**Member:** {user.mention}\n**Unbanned By:** {admin_text}", discord.Color.green())  
+    embed = make_embed("♻️️ Member Unbanned", f"**Member:** {user.mention}\n**Unbanned By:** {admin_text}", discord.Color.green())  
     add_user_thumbnail(embed, user)  
     await send_log(BAN_LOG_ID, embed)
 
@@ -612,9 +613,9 @@ async def on_message(message):
 
 # --- STAFF SLASH COMMAND WITH CHOICE ---
 @bot.tree.command(name="staff", description="پێدانی ڕۆڵی ستاف بە ئەندام")
-@discord.app.choices(role_choice=[
-    discord.app.Choice(name="Barxakan🐑", value="barxakan"),
-    discord.app.Choice(name="mshaxor", value="mshaxor")
+@app_commands.choices(role_choice=[
+    app_commands.Choice(name="Barxakan🐑", value="barxakan"),
+    app_commands.Choice(name="mshaxor", value="mshaxor")
 ])
 async def staff(interaction: discord.Interaction, member: discord.Member, role_choice: str):
     if not interaction.user.guild_permissions.administrator:
