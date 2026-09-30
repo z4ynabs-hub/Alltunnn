@@ -1386,18 +1386,18 @@ async def staff(
             ephemeral=True
         )
 
-# COLOR ROLE SYSTEM (RANGI-ROLE) WITH AUTOCOMPLETE
+# COLOR ROLE SYSTEM (RANGI-ROLE) WITH STRING AUTOCOMPLETE
 @bot.tree.command(
     name="rangi-role",
     description="گۆڕینی ڕەنگی ڕۆڵ"
 )
 @app_commands.describe(
-    role="ڕۆڵەکە هەڵبژێرە (ناوی بنووسە یان هەڵبژێرە)",
+    role="ناوی ڕۆڵەکە بنووسە یان هەڵبژێرە",
     color="کۆدی ڕەنگ بۆ نموونە #FF0000"
 )
 async def rangi_role(
     interaction: discord.Interaction,
-    role: discord.Role,
+    role: str,
     color: str
 ):
     if not interaction.user.guild_permissions.administrator:
@@ -1414,18 +1414,31 @@ async def rangi_role(
         )
         return
 
-    user_top_role = interaction.user.top_role
-    is_owner = interaction.user.id == interaction.guild.owner_id
+    guild = interaction.guild
+    target_role = None
+    if role.isdigit():
+        target_role = guild.get_role(int(role))
+    else:
+        target_role = discord.utils.get(guild.roles, name=role)
 
-    if role.name == "@everyone" or role.managed or role.is_bot_managed():
+    if not target_role:
+        await interaction.response.send_message(
+            "❌ ڕۆڵەکە نەدۆزرایەوە!",
+            ephemeral=True
+        )
+        return
+
+    user_top_role = interaction.user.top_role
+    is_owner = interaction.user.id == guild.owner_id
+
+    if target_role.name == "@everyone" or target_role.managed or target_role.is_bot_managed():
         await interaction.response.send_message(
             "❌ ناتوانیت ڕەنگی ئەم ڕۆڵە بگۆڕیت!",
             ephemeral=True
         )
         return
 
-    # ڕێگەدان بە ڕۆڵی خۆی و خوار خۆی، بەڵام قەدەغەکردنی سەروو خۆی
-    if not is_owner and role > user_top_role:
+    if not is_owner and target_role > user_top_role:
         await interaction.response.send_message(
             "❌ ناتوانیت ڕەنگی ئەم ڕۆڵە بگۆڕیت چونکە لەسەروو ڕۆڵەکەتدایە!",
             ephemeral=True
@@ -1442,12 +1455,12 @@ async def rangi_role(
             )
         )
 
-        await role.edit(
+        await target_role.edit(
             color=color_obj
         )
 
         await interaction.response.send_message(
-            f"✅ ڕەنگی ڕۆڵی **{role.name}** بە سەرکەوتوویی گۆڕدرا!",
+            f"✅ ڕەنگی ڕۆڵی **{target_role.name}** بە سەرکەوتوویی گۆڕدرا!",
             ephemeral=True
         )
     except Exception as e:
