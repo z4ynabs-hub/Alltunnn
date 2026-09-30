@@ -257,11 +257,14 @@ async def get_or_create_muted_role(guild):
     mute_role = discord.utils.get(guild.roles, id=1058553204251578389)  
     if not mute_role:
         mute_role = discord.utils.get(guild.roles, name="Muted")  
-    if mute_role:  
-        return mute_role  
-    mute_role = await guild.create_role(name="Muted", reason="Karezma mute role")  
+    
+    if not mute_role:  
+        mute_role = await guild.create_role(name="Muted", reason="Karezma mute role")
+    
+    # ئەم بەشە دڵنیای دەکاتەوە کە لە کاتی میوتکردندا بەناو هەموو کەناڵەکاندا دەسووڕێتەوە
     for channel in guild.channels:  
         await apply_muted_permissions(channel, mute_role)  
+        
     return mute_role
 
 # =========================================================
@@ -438,7 +441,7 @@ async def on_member_ban(guild, user):
 async def on_member_unban(guild, user):
     entry = await get_audit_executor(guild, discord.AuditLogAction.unban, user.id)  
     admin_text = entry.user.mention if entry and entry.user else "Unknown"  
-    embed = make_embed("♻️ Member Unbanned", f"**Member:** {user.mention}\n**Unbanned By:** {admin_text}", discord.Color.green())  
+    embed = make_embed("♻️️ Member Unbanned", f"**Member:** {user.mention}\n**Unbanned By:** {admin_text}", discord.Color.green())  
     add_user_thumbnail(embed, user)  
     await send_log(BAN_LOG_ID, embed)
 
