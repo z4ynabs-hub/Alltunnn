@@ -370,13 +370,10 @@ async def on_member_update(before, after):
 async def get_target_member(message):
 
     if message.mentions:
-        member = message.mentions[0]
-
-        if isinstance(
-            member,
-            discord.Member
-        ):
-            return member
+        for member in message.mentions:
+            if member.id != bot.user.id:
+                if isinstance(member, discord.Member):
+                    return member
 
     if message.reference:
         try:
@@ -385,6 +382,9 @@ async def get_target_member(message):
                     message.reference.message_id
                 )
             )
+
+            if referenced_message.author.id == bot.user.id:
+                return None
 
             if isinstance(
                 referenced_message.author,
@@ -1097,7 +1097,17 @@ async def on_message(message):
         return
 
     parts = content.split()
-    command = parts[0].lower()
+    
+    # دۆزینەوەی ناوی کۆماند بە شێوازێک کە تەنانەت ئەگەر تگیش لە پێشەوە بێت کاری بکات
+    command = ""
+    for part in parts:
+        clean_part = part.lower().strip()
+        if clean_part in ["safika", "mute", "unmute", "bfra", "unban", "lock", "unlock"]:
+            command = clean_part
+            break
+
+    if not command and parts:
+        command = parts[0].lower()
 
     if command == "safika":
 
