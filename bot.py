@@ -1223,7 +1223,7 @@ async def on_message(message):
                     pass
 
                 await message.channel.send(
-                    f"✈️ Frenra {target.mention}",
+                    f"Frenraa✈️ {target.mention}",
                     delete_after=2
                 )
             except Exception:
