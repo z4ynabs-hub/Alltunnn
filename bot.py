@@ -364,17 +364,18 @@ async def on_member_update(before, after):
         )
 
 # =========================================================
-# 9. GET TARGET FROM TAG OR REPLY
+# 9. GET TARGET MEMBER FROM TAG OR REPLY
 # =========================================================
 
 async def get_target_member(message):
-
+    # 1. پشکنینی تگ (Mentions) بە شێوازێک تەنها ئەندامی مەبەست وەرگرین نەک بۆتەکە
     if message.mentions:
         for member in message.mentions:
             if member.id != bot.user.id:
                 if isinstance(member, discord.Member):
                     return member
 
+    # 2. پشکنینی ڕیپڵای (Reply)
     if message.reference:
         try:
             referenced_message = (
@@ -1098,7 +1099,7 @@ async def on_message(message):
 
     parts = content.split()
     
-    # دۆزینەوەی ناوی کۆماند بە شێوازێک کە تەنانەت ئەگەر تگیش لە پێشەوە بێت کاری بکات
+    # دۆزینەوەی کۆماند بە شێوازێک کە وشەی `bfra` (بە هەر شێوازێک نووسرابێت) بناسێتەوە
     command = ""
     for part in parts:
         clean_part = part.lower().strip()
