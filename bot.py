@@ -257,10 +257,10 @@ async def require_config_manager(interaction):
     if await is_config_manager(interaction):
         return True
     try:
-        await interaction.response.send_message(
-            "❌ تەنها **Server Owner** یان **Bot Developer** دەتوانێت ئەم کۆماندە بەکاربهێنێت.",
-            ephemeral=True
-        )
+        if interaction.response.is_done():
+            await interaction.followup.send("❌ تەنها **Server Owner** یان **Bot Developer** دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ تەنها **Server Owner** یان **Bot Developer** دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True)
     except Exception:
         pass
     return False
@@ -745,7 +745,7 @@ async def on_member_unban(guild, user):
     admin = entry.user.mention if entry and entry.user else "Unknown"
 
     embed = make_embed(
-        "♻️️ Member Unbanned",
+        "♻ Member Unbanned",
         f"**Member:** {user.mention}\n**Unbanned By:** {admin}",
         discord.Color.green()
     )
@@ -954,30 +954,31 @@ async def on_message(message):
     ]
 )
 async def staff(interaction: discord.Interaction, member: discord.Member, role_choice: str):
+    await interaction.response.defer(ephemeral=True)
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True)
+        await interaction.followup.send("❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True)
         return
 
     config = server_config(interaction.guild)
     role_id = config.get("role_barxakan") if role_choice == "barxakan" else config.get("role_mshaxor")
 
     if not role_id:
-        await interaction.response.send_message("❌ Role ـەکە هێشتا config نەکراوە.", ephemeral=True)
+        await interaction.followup.send("❌ Role ـەکە هێشتا config نەکراوە.", ephemeral=True)
         return
 
     role = interaction.guild.get_role(role_id)
     if not role:
-        await interaction.response.send_message("❌ ڕۆڵەکە نەدۆزرایەوە.", ephemeral=True)
+        await interaction.followup.send("❌ ڕۆڵەکە نەدۆزرایەوە.", ephemeral=True)
         return
 
     try:
         if role in member.roles:
-            await interaction.response.send_message(f"⚠️ {member.mention} پێشتر ئەم ڕۆڵەی هەیە.", ephemeral=True)
+            await interaction.followup.send(f"⚠️ {member.mention} پێشتر ئەم ڕۆڵەی هەیە.", ephemeral=True)
         else:
             await member.add_roles(role, reason=f"Staff by {interaction.user}")
-            await interaction.response.send_message(f"✅ ڕۆڵی **{role.name}** درا بە {member.mention}.", ephemeral=True)
+            await interaction.followup.send(f"✅ ڕۆڵی **{role.name}** درا بە {member.mention}.", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message(f"❌ هەڵە: `{e}`", ephemeral=True)
+        await interaction.followup.send(f"❌ هەڵە: `{e}`", ephemeral=True)
 
 # =========================================================
 # 23. /RANGI-ROLE
@@ -986,29 +987,30 @@ async def staff(interaction: discord.Interaction, member: discord.Member, role_c
 @bot.tree.command(name="rangi-role", description="گۆڕینی ڕەنگی ڕۆڵ")
 @app_commands.describe(role="ناوی role یان ID", color="کۆدی ڕەنگ، نموونە #FF0000")
 async def rangi_role(interaction: discord.Interaction, role: str, color: str):
+    await interaction.response.defer(ephemeral=True)
     if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True)
+        await interaction.followup.send("❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True)
         return
 
     restricted = restricted_users(interaction.guild.id)
     if interaction.user.id in restricted or (is_legacy(interaction.guild) and interaction.user.id in RESTRICTED_COLOR_USERS):
-        await interaction.response.send_message("❌ تۆ قەدەغەکراوی لە گۆڕینی ڕەنگ!", ephemeral=True)
+        await interaction.followup.send("❌ تۆ قەدەغەکراوی لە گۆڕینی ڕەنگ!", ephemeral=True)
         return
 
     guild = interaction.guild
     target = guild.get_role(int(role)) if role.isdigit() else discord.utils.get(guild.roles, name=role)
 
     if not target:
-        await interaction.response.send_message("❌ ڕۆڵەکە نەدۆزرایەوە.", ephemeral=True)
+        await interaction.followup.send("❌ ڕۆڵەکە نەدۆزرایەوە.", ephemeral=True)
         return
 
     owner = interaction.user.id == guild.owner_id
     if target.name == "@everyone" or target.managed or target.is_bot_managed():
-        await interaction.response.send_message("❌ ناتوانیت ڕەنگی ئەم ڕۆڵە بگۆڕیت.", ephemeral=True)
+        await interaction.followup.send("❌ ناتوانیت ڕەنگی ئەم ڕۆڵە بگۆڕیت.", ephemeral=True)
         return
 
     if not owner and target > interaction.user.top_role:
-        await interaction.response.send_message("❌ ئەم role ـە لەسەرووی role ـی تۆیە.", ephemeral=True)
+        await interaction.followup.send("❌ ئەم role ـە لەسەرووی role ـی تۆیە.", ephemeral=True)
         return
 
     try:
@@ -1018,9 +1020,9 @@ async def rangi_role(interaction: discord.Interaction, role: str, color: str):
 
         color_obj = discord.Color(int(value[:6], 16))
         await target.edit(color=color_obj)
-        await interaction.response.send_message(f"✅ ڕەنگی **{target.name}** گۆڕدرا.", ephemeral=True)
+        await interaction.followup.send(f"✅ ڕەنگی **{target.name}** گۆڕدرا.", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message(f"❌ هەڵە لە کۆدی ڕەنگ: `{e}`", ephemeral=True)
+        await interaction.followup.send(f"❌ هەڵە لە کۆدی ڕەنگ: `{e}`", ephemeral=True)
 
 @rangi_role.autocomplete("role")
 async def rangi_role_autocomplete(interaction: discord.Interaction, current: str):
@@ -1054,13 +1056,14 @@ async def rangi_role_autocomplete(interaction: discord.Interaction, current: str
     ]
 )
 async def regri(interaction: discord.Interaction, member: discord.Member, action: str):
+    await interaction.response.defer(ephemeral=True)
     config = server_config(interaction.guild)
     allowed = config.get("regri_allowed_roles") or set()
     owner = interaction.user.id == interaction.guild.owner_id
     has_role = any(role.id in allowed for role in interaction.user.roles)
 
     if not owner and not has_role:
-        await interaction.response.send_message("❌ تۆ دەسەڵاتی ئەم کۆماندە نییت.", ephemeral=True)
+        await interaction.followup.send("❌ تۆ دەسەڵاتی ئەم کۆماندە نییت.", ephemeral=True)
         return
 
     add = action.lower() == "add"
@@ -1072,7 +1075,7 @@ async def regri(interaction: discord.Interaction, member: discord.Member, action
 
     set_restricted(interaction.guild.id, member.id, add)
     text = f"🚫 {member.mention} قەدەغەکرا لە گۆڕینی ڕەنگ." if add else f"✅ ڕێگەدرا بە {member.mention} بۆ گۆڕینی ڕەنگ."
-    await interaction.response.send_message(text, ephemeral=True)
+    await interaction.followup.send(text, ephemeral=True)
 
 # =========================================================
 # 25. /SETUP
@@ -1080,11 +1083,12 @@ async def regri(interaction: discord.Interaction, member: discord.Member, action
 
 @bot.tree.command(name="setup", description="دەستپێکردنی config بۆ ئەم سێرڤەرە")
 async def setup(interaction: discord.Interaction):
+    await interaction.response.defer(ephemeral=True)
     if not await require_config_manager(interaction):
         return
 
     if is_legacy(interaction.guild):
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "ℹ️ ئەمە سێرڤەری کۆنە. Config ـەکانی کۆن هەر وەک خۆی پارێزراون.",
             ephemeral=True
         )
@@ -1093,13 +1097,13 @@ async def setup(interaction: discord.Interaction):
     ensure_config(interaction.guild.id)
     update_config(interaction.guild.id, setup_done=1)
 
-    await interaction.response.send_message(
+    await interaction.followup.send(
         "✅ Config ـی سێرڤەرەکە دروست کرا.\n\nئێستا بەکاربهێنە:\n• `/welcome`\n• `/log`\n• `/roles`\n• `/regri-roles`\n• `/config`",
         ephemeral=True
     )
 
 # =========================================================
-# 26. /WELCOME (چاککراو - ئۆپشنەکان دڵخواز کراون)
+# 26. /WELCOME (چاککراوی تەواوەتی)
 # =========================================================
 
 @bot.tree.command(name="welcome", description="ڕێکخستنی welcome")
@@ -1115,15 +1119,17 @@ async def welcome_config(
     image: str = None
 ):
     try:
+        await interaction.response.defer(ephemeral=True)
+
         if not await require_config_manager(interaction):
             return
 
         if not interaction.guild:
-            await interaction.response.send_message("❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.", ephemeral=True)
+            await interaction.followup.send("❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.", ephemeral=True)
             return
 
         if is_legacy(interaction.guild):
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 "⚠️ ئەمە سێرڤەری کۆنە و config ـی کۆنەکە بۆ پاراستنی سێرڤەری یەکەم ناگۆڕدرێت.",
                 ephemeral=True
             )
@@ -1145,7 +1151,7 @@ async def welcome_config(
             setup_done=1
         )
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"✅ **Welcome بە سەرکەوتوویی ڕێکخرا!**\n\n"
             f"📢 **Channel:** {channel.mention}\n"
             f"📝 **Message:** `{short_value(text)}`\n"
@@ -1156,10 +1162,7 @@ async def welcome_config(
     except Exception as e:
         traceback.print_exc()
         try:
-            if interaction.response.is_done():
-                await interaction.followup.send("❌ هەڵەیەک لە `/welcome` ڕوویدا.", ephemeral=True)
-            else:
-                await interaction.response.send_message("❌ هەڵەیەک لە `/welcome` ڕوویدا.", ephemeral=True)
+            await interaction.followup.send("❌ هەڵەیەک لە `/welcome` ڕوویدا.", ephemeral=True)
         except Exception:
             pass
 
@@ -1195,34 +1198,33 @@ LOG_FIELDS = {
 )
 async def log_config(interaction: discord.Interaction, log_type: str, channel: discord.TextChannel):
     try:
+        await interaction.response.defer(ephemeral=True)
+
         if not await require_config_manager(interaction):
             return
 
         if not interaction.guild:
-            await interaction.response.send_message("❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.", ephemeral=True)
+            await interaction.followup.send("❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.", ephemeral=True)
             return
 
         if is_legacy(interaction.guild):
-            await interaction.response.send_message("⚠️ Config ـی سێرڤەری کۆن ناگۆڕدرێت.", ephemeral=True)
+            await interaction.followup.send("⚠️ Config ـی سێرڤەری کۆن ناگۆڕدرێت.", ephemeral=True)
             return
 
         field = LOG_FIELDS.get(log_type)
         if not field:
-            await interaction.response.send_message("❌ جۆری Log ـەکە هەڵەیە.", ephemeral=True)
+            await interaction.followup.send("❌ جۆری Log ـەکە هەڵەیە.", ephemeral=True)
             return
 
         ensure_config(interaction.guild.id)
         update_config(interaction.guild.id, **{field: channel.id, "setup_done": 1})
 
-        await interaction.response.send_message(f"✅ Log ـی **{log_type}** خرایە سەر {channel.mention}.", ephemeral=True)
+        await interaction.followup.send(f"✅ Log ـی **{log_type}** خرایە سەر {channel.mention}.", ephemeral=True)
 
     except Exception as e:
         traceback.print_exc()
         try:
-            if interaction.response.is_done():
-                await interaction.followup.send("❌ هەڵەیەک لە `/log` ڕوویدا.", ephemeral=True)
-            else:
-                await interaction.response.send_message("❌ هەڵەیەک لە `/log` ڕوویدا.", ephemeral=True)
+            await interaction.followup.send("❌ هەڵەیەک لە `/log` ڕوویدا.", ephemeral=True)
         except Exception:
             pass
 
@@ -1239,27 +1241,29 @@ async def log_config(interaction: discord.Interaction, log_type: str, channel: d
 )
 async def roles_config(interaction: discord.Interaction, role_type: str, role: discord.Role):
     try:
+        await interaction.response.defer(ephemeral=True)
+
         if not await require_config_manager(interaction):
             return
 
         if not interaction.guild:
-            await interaction.response.send_message("❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.", ephemeral=True)
+            await interaction.followup.send("❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.", ephemeral=True)
             return
 
         if is_legacy(interaction.guild):
-            await interaction.response.send_message("⚠️ Role ـەکانی سێرڤەری کۆن ناگۆڕدرێن.", ephemeral=True)
+            await interaction.followup.send("⚠️ Role ـەکانی سێرڤەری کۆن ناگۆڕدرێن.", ephemeral=True)
             return
 
         field = "role_barxakan" if role_type == "barxakan" else "role_mshaxor"
         ensure_config(interaction.guild.id)
         update_config(interaction.guild.id, **{field: role.id, "setup_done": 1})
 
-        await interaction.response.send_message(f"✅ **{role_type}** بوو بە {role.mention}.", ephemeral=True)
+        await interaction.followup.send(f"✅ **{role_type}** بوو بە {role.mention}.", ephemeral=True)
 
     except Exception as e:
         traceback.print_exc()
         try:
-            await interaction.response.send_message("❌ هەڵەیەک لە `/roles` ڕوویدا.", ephemeral=True)
+            await interaction.followup.send("❌ هەڵەیەک لە `/roles` ڕوویدا.", ephemeral=True)
         except Exception:
             pass
 
@@ -1271,21 +1275,23 @@ async def roles_config(interaction: discord.Interaction, role_type: str, role: d
 @app_commands.describe(roles="Role ID ـەکان بە space یان comma")
 async def regri_roles_config(interaction: discord.Interaction, roles: str):
     try:
+        await interaction.response.defer(ephemeral=True)
+
         if not await require_config_manager(interaction):
             return
 
         if not interaction.guild:
-            await interaction.response.send_message("❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.", ephemeral=True)
+            await interaction.followup.send("❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.", ephemeral=True)
             return
 
         if is_legacy(interaction.guild):
-            await interaction.response.send_message("⚠️ Regri role ـەکانی سێرڤەری کۆن ناگۆڕدرێن.", ephemeral=True)
+            await interaction.followup.send("⚠️ Regri role ـەکانی سێرڤەری کۆن ناگۆڕدرێن.", ephemeral=True)
             return
 
         try:
             role_ids = parse_roles(roles)
         except ValueError as e:
-            await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+            await interaction.followup.send(f"❌ {e}", ephemeral=True)
             return
 
         ensure_config(interaction.guild.id)
@@ -1296,7 +1302,7 @@ async def regri_roles_config(interaction: discord.Interaction, roles: str):
             role = interaction.guild.get_role(role_id)
             mentions.append(role.mention if role else f"`{role_id}`")
 
-        await interaction.response.send_message(
+        await interaction.followup.send(
             "✅ Regri roles نوێکرانەوە:\n" + ("\n".join(mentions) if mentions else "هیچ role ـێک نییە."),
             ephemeral=True
         )
@@ -1304,10 +1310,7 @@ async def regri_roles_config(interaction: discord.Interaction, roles: str):
     except Exception as e:
         traceback.print_exc()
         try:
-            if interaction.response.is_done():
-                await interaction.followup.send("❌ هەڵەیەک لە `/regri-roles` ڕوویدا.", ephemeral=True)
-            else:
-                await interaction.response.send_message("❌ هەڵەیەک لە `/regri-roles` ڕوویدا.", ephemeral=True)
+            await interaction.followup.send("❌ هەڵەیەک لە `/regri-roles` ڕوویدا.", ephemeral=True)
         except Exception:
             pass
 
@@ -1318,11 +1321,13 @@ async def regri_roles_config(interaction: discord.Interaction, roles: str):
 @bot.tree.command(name="config", description="پیشاندانی config ـی سێرڤەر")
 async def config_view(interaction: discord.Interaction):
     try:
+        await interaction.response.defer(ephemeral=True)
+
         if not await require_config_manager(interaction):
             return
 
         if not interaction.guild:
-            await interaction.response.send_message("❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.", ephemeral=True)
+            await interaction.followup.send("❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.", ephemeral=True)
             return
 
         guild = interaction.guild
@@ -1384,15 +1389,12 @@ async def config_view(interaction: discord.Interaction):
             inline=False
         )
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     except Exception as e:
         traceback.print_exc()
         try:
-            if interaction.response.is_done():
-                await interaction.followup.send("❌ هەڵەیەک لە `/config` ڕوویدا.", ephemeral=True)
-            else:
-                await interaction.response.send_message("❌ هەڵەیەک لە `/config` ڕوویدا.", ephemeral=True)
+            await interaction.followup.send("❌ هەڵەیەک لە `/config` ڕوویدا.", ephemeral=True)
         except Exception:
             pass
 
