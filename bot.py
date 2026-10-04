@@ -6,6 +6,7 @@ import os
 import asyncio
 import sqlite3
 import json
+import traceback
 
 # =========================================================
 # 1. BOT SETTINGS
@@ -59,23 +60,43 @@ DEVELOPER_IDS = set()
 
 try:
     developers = os.getenv("DEVELOPER_IDS", "")
+
     if developers.strip():
         DEVELOPER_IDS.update(
             int(x.strip())
             for x in developers.split(",")
             if x.strip().isdigit()
         )
+
 except Exception:
     pass
+
+
+# ---------------------------------------------------------
+# IMPORTANT:
+# This is detected automatically from the ORIGINAL
+# welcome channel above.
+# ---------------------------------------------------------
 
 LEGACY_GUILD_ID = None
 
 
+# =========================================================
+# 3.1 DATABASE
+# =========================================================
+
 def init_db():
 
-    conn = sqlite3.connect(CONFIG_DB)
+    conn = sqlite3.connect(
+        CONFIG_DB,
+        timeout=10
+    )
 
     try:
+
+        # -------------------------------------------------
+        # Main configuration table
+        # -------------------------------------------------
 
         conn.execute("""
         CREATE TABLE IF NOT EXISTS guild_config (
@@ -98,10 +119,64 @@ def init_db():
             role_barxakan INTEGER,
             role_mshaxor INTEGER,
 
-            regri_allowed_roles TEXT,
+            regri_allowed_roles TEXT DEFAULT '[]',
             setup_done INTEGER DEFAULT 0
         )
         """)
+
+        # -------------------------------------------------
+        # Migration
+        #
+        # If the old database already exists, CREATE TABLE
+        # will NOT add missing columns.
+        #
+        # So we check every required column and add it.
+        # -------------------------------------------------
+
+        required_columns = {
+
+            "welcome_channel_id": "INTEGER",
+            "welcome_image": "TEXT",
+            "welcome_message": "TEXT",
+
+            "server_log_id": "INTEGER",
+            "chat_log_id": "INTEGER",
+            "voice_log_id": "INTEGER",
+            "ban_log_id": "INTEGER",
+            "left_log_id": "INTEGER",
+            "channel_log_id": "INTEGER",
+            "role_log_id": "INTEGER",
+            "member_log_id": "INTEGER",
+            "nickname_log_id": "INTEGER",
+
+            "role_barxakan": "INTEGER",
+            "role_mshaxor": "INTEGER",
+
+            "regri_allowed_roles": "TEXT",
+            "setup_done": "INTEGER"
+        }
+
+        existing_columns = {
+            row[1]
+            for row in conn.execute(
+                "PRAGMA table_info(guild_config)"
+            ).fetchall()
+        }
+
+        for column, column_type in required_columns.items():
+
+            if column not in existing_columns:
+
+                conn.execute(
+                    f"""
+                    ALTER TABLE guild_config
+                    ADD COLUMN {column} {column_type}
+                    """
+                )
+
+        # -------------------------------------------------
+        # Restricted color users
+        # -------------------------------------------------
 
         conn.execute("""
         CREATE TABLE IF NOT EXISTS restricted_color_users (
@@ -111,63 +186,111 @@ def init_db():
         )
         """)
 
+        # -------------------------------------------------
+        # Fix NULL values
+        # -------------------------------------------------
+
+        conn.execute("""
+        UPDATE guild_config
+        SET regri_allowed_roles = '[]'
+        WHERE regri_allowed_roles IS NULL
+        """)
+
+        conn.execute("""
+        UPDATE guild_config
+        SET setup_done = 0
+        WHERE setup_done IS NULL
+        """)
+
         conn.commit()
 
     finally:
+
         conn.close()
 
+
+# =========================================================
+# 3.2 GET CONFIG
+# =========================================================
 
 def get_config(guild_id):
 
     init_db()
 
-    conn = sqlite3.connect(CONFIG_DB)
+    conn = sqlite3.connect(
+        CONFIG_DB,
+        timeout=10
+    )
+
     conn.row_factory = sqlite3.Row
 
     try:
 
         row = conn.execute(
-            "SELECT * FROM guild_config WHERE guild_id=?",
+            """
+            SELECT *
+            FROM guild_config
+            WHERE guild_id=?
+            """,
             (guild_id,)
         ).fetchone()
 
         return dict(row) if row else None
 
     finally:
+
         conn.close()
 
+
+# =========================================================
+# 3.3 ENSURE CONFIG
+# =========================================================
 
 def ensure_config(guild_id):
 
     if get_config(guild_id):
         return
 
-    conn = sqlite3.connect(CONFIG_DB)
+    conn = sqlite3.connect(
+        CONFIG_DB,
+        timeout=10
+    )
 
     try:
 
         conn.execute("""
         INSERT OR IGNORE INTO guild_config (
             guild_id,
-            regri_allowed_roles
+            regri_allowed_roles,
+            setup_done
         )
-        VALUES (?, ?)
+        VALUES (?, ?, ?)
         """, (
             guild_id,
-            json.dumps([])
+            json.dumps([]),
+            0
         ))
 
         conn.commit()
 
     finally:
+
         conn.close()
 
 
-def update_config(guild_id, **values):
+# =========================================================
+# 3.4 UPDATE CONFIG
+# =========================================================
+
+def update_config(
+    guild_id,
+    **values
+):
 
     ensure_config(guild_id)
 
     allowed = {
+
         "welcome_channel_id",
         "welcome_image",
         "welcome_message",
@@ -190,9 +313,9 @@ def update_config(guild_id, **values):
     }
 
     values = {
-        k: v
-        for k, v in values.items()
-        if k in allowed
+        key: value
+        for key, value in values.items()
+        if key in allowed
     }
 
     if not values:
@@ -203,7 +326,10 @@ def update_config(guild_id, **values):
         for key in values
     )
 
-    conn = sqlite3.connect(CONFIG_DB)
+    conn = sqlite3.connect(
+        CONFIG_DB,
+        timeout=10
+    )
 
     try:
 
@@ -219,8 +345,13 @@ def update_config(guild_id, **values):
         conn.commit()
 
     finally:
+
         conn.close()
 
+
+# =========================================================
+# 4. LEGACY SERVER
+# =========================================================
 
 def is_legacy(guild):
 
@@ -236,31 +367,67 @@ def server_config(guild):
     if guild is None:
         return {}
 
+    # -----------------------------------------------------
+    # ORIGINAL SERVER
+    # -----------------------------------------------------
+
     if is_legacy(guild):
 
         return {
-            "welcome_channel_id": WELCOME_CHANNEL_ID,
-            "welcome_image": None,
-            "welcome_message": "axer beyt bo karezma",
 
-            "server_log_id": SERVER_LOG_ID,
-            "chat_log_id": CHAT_LOG_ID,
-            "voice_log_id": VOICE_LOG_ID,
-            "ban_log_id": BAN_LOG_ID,
-            "left_log_id": LEFT_LOG_ID,
-            "channel_log_id": CHANNEL_LOG_ID,
-            "role_log_id": ROLE_LOG_ID,
-            "member_log_id": MEMBER_LOG_ID,
-            "nickname_log_id": NICKNAME_LOG_ID,
+            "welcome_channel_id":
+                WELCOME_CHANNEL_ID,
 
-            "role_barxakan": ROLE_BARXAKAN,
-            "role_mshaxor": ROLE_MSHAXOR,
+            "welcome_image":
+                None,
+
+            "welcome_message":
+                "axer beyt bo karezma",
+
+            "server_log_id":
+                SERVER_LOG_ID,
+
+            "chat_log_id":
+                CHAT_LOG_ID,
+
+            "voice_log_id":
+                VOICE_LOG_ID,
+
+            "ban_log_id":
+                BAN_LOG_ID,
+
+            "left_log_id":
+                LEFT_LOG_ID,
+
+            "channel_log_id":
+                CHANNEL_LOG_ID,
+
+            "role_log_id":
+                ROLE_LOG_ID,
+
+            "member_log_id":
+                MEMBER_LOG_ID,
+
+            "nickname_log_id":
+                NICKNAME_LOG_ID,
+
+            "role_barxakan":
+                ROLE_BARXAKAN,
+
+            "role_mshaxor":
+                ROLE_MSHAXOR,
 
             "regri_allowed_roles":
                 set(REGRI_ALLOWED_ROLES)
         }
 
-    row = get_config(guild.id)
+    # -----------------------------------------------------
+    # NEW SERVER
+    # -----------------------------------------------------
+
+    row = get_config(
+        guild.id
+    )
 
     if not row:
         return {}
@@ -285,7 +452,7 @@ def server_config(guild):
 
 
 # =========================================================
-# 4. OWNER / DEVELOPER
+# 5. OWNER / DEVELOPER
 # =========================================================
 
 async def is_developer(user):
@@ -297,11 +464,18 @@ async def is_developer(user):
 
         info = await bot.application_info()
 
+        # Bot owner
         if info.owner:
+
             if info.owner.id == user.id:
                 return True
 
-        team = getattr(info, "team", None)
+        # Developer Team
+        team = getattr(
+            info,
+            "team",
+            None
+        )
 
         if team:
 
@@ -316,22 +490,33 @@ async def is_developer(user):
     return False
 
 
-async def is_config_manager(interaction):
+async def is_config_manager(
+    interaction
+):
 
     if not interaction.guild:
         return False
 
-    if interaction.user.id == interaction.guild.owner_id:
+    # Server Owner
+    if (
+        interaction.user.id
+        == interaction.guild.owner_id
+    ):
         return True
 
+    # Bot Developer
     return await is_developer(
         interaction.user
     )
 
 
-async def require_config_manager(interaction):
+async def require_config_manager(
+    interaction
+):
 
-    if await is_config_manager(interaction):
+    if await is_config_manager(
+        interaction
+    ):
         return True
 
     try:
@@ -349,22 +534,35 @@ async def require_config_manager(interaction):
 
 
 # =========================================================
-# 5. HELPERS
+# 6. HELPERS
 # =========================================================
 
-def get_log_channel(guild, key):
+def get_log_channel(
+    guild,
+    key
+):
 
-    config = server_config(guild)
+    config = server_config(
+        guild
+    )
 
-    channel_id = config.get(key)
+    channel_id = config.get(
+        key
+    )
 
     if not channel_id:
         return None
 
-    return guild.get_channel(channel_id)
+    return guild.get_channel(
+        channel_id
+    )
 
 
-async def send_log(guild, key, embed):
+async def send_log(
+    guild,
+    key,
+    embed
+):
 
     try:
 
@@ -374,6 +572,7 @@ async def send_log(guild, key, embed):
         )
 
         if channel:
+
             await channel.send(
                 embed=embed
             )
@@ -404,12 +603,17 @@ def make_embed(
     return embed
 
 
-def add_thumbnail(embed, user):
+def add_thumbnail(
+    embed,
+    user
+):
 
     try:
+
         embed.set_thumbnail(
             url=user.display_avatar.url
         )
+
     except Exception:
         pass
 
@@ -423,7 +627,9 @@ async def audit_executor(
 
     try:
 
-        await asyncio.sleep(delay)
+        await asyncio.sleep(
+            delay
+        )
 
         async for entry in guild.audit_logs(
             limit=10,
@@ -451,6 +657,7 @@ async def audit_executor(
                 if (
                     now - entry.created_at
                 ).total_seconds() > 15:
+
                     continue
 
             return entry
@@ -461,7 +668,10 @@ async def audit_executor(
     return None
 
 
-def short_value(value, limit=70):
+def short_value(
+    value,
+    limit=70
+):
 
     if value is None:
         return "❌ دانەنراوە"
@@ -469,20 +679,30 @@ def short_value(value, limit=70):
     value = str(value)
 
     if len(value) > limit:
-        return value[:limit - 3] + "..."
+
+        return (
+            value[:limit - 3]
+            + "..."
+        )
 
     return value
 
 
-def parse_roles(value):
+def parse_roles(
+    value
+):
 
-    value = value.replace(",", " ")
+    value = value.replace(
+        ",",
+        " "
+    )
 
     result = []
 
     for item in value.split():
 
         if not item.isdigit():
+
             raise ValueError(
                 "Role ID ـەکان دەبێت تەنها ژمارە بن."
             )
@@ -496,10 +716,19 @@ def parse_roles(value):
     )
 
 
-def restricted_users(guild_id):
+# =========================================================
+# 7. RESTRICTED USERS
+# =========================================================
+
+def restricted_users(
+    guild_id
+):
+
+    init_db()
 
     conn = sqlite3.connect(
-        CONFIG_DB
+        CONFIG_DB,
+        timeout=10
     )
 
     try:
@@ -519,6 +748,7 @@ def restricted_users(guild_id):
         }
 
     finally:
+
         conn.close()
 
 
@@ -528,8 +758,11 @@ def set_restricted(
     value
 ):
 
+    init_db()
+
     conn = sqlite3.connect(
-        CONFIG_DB
+        CONFIG_DB,
+        timeout=10
     )
 
     try:
@@ -540,8 +773,8 @@ def set_restricted(
                 """
                 INSERT OR IGNORE INTO
                 restricted_color_users
-                (guild_id,user_id)
-                VALUES (?,?)
+                (guild_id, user_id)
+                VALUES (?, ?)
                 """,
                 (
                     guild_id,
@@ -567,11 +800,12 @@ def set_restricted(
         conn.commit()
 
     finally:
+
         conn.close()
 
 
 # =========================================================
-# 6. READY
+# 8. READY
 # =========================================================
 
 @bot.event
@@ -581,6 +815,10 @@ async def on_ready():
 
     init_db()
 
+    # -----------------------------------------------------
+    # Find original server automatically
+    # -----------------------------------------------------
+
     try:
 
         channel = bot.get_channel(
@@ -588,19 +826,38 @@ async def on_ready():
         )
 
         if channel:
+
             LEGACY_GUILD_ID = (
                 channel.guild.id
             )
 
-    except Exception:
-        pass
+    except Exception as e:
+
+        print(
+            f"Legacy server detection error: {e}"
+        )
+
+    # -----------------------------------------------------
+    # Sync Slash Commands
+    # -----------------------------------------------------
 
     try:
-        await bot.tree.sync()
+
+        synced = await bot.tree.sync()
+
+        print(
+            f"Slash commands synced: {len(synced)}"
+        )
+
     except Exception as e:
+
         print(
             f"Slash sync error: {e}"
         )
+
+    # -----------------------------------------------------
+    # Muted role
+    # -----------------------------------------------------
 
     for guild in bot.guilds:
 
@@ -612,26 +869,47 @@ async def on_ready():
             )
 
             if role:
+
                 await sync_muted_permissions(
                     guild,
                     role
                 )
 
-        except Exception:
-            pass
+        except Exception as e:
+
+            print(
+                f"Muted sync error in {guild.id}: {e}"
+            )
 
     print(
-        f"بۆتەکە بە سەرکەوتوویی چالاک بوو: "
-        f"{bot.user}"
+        "========================================"
+    )
+
+    print(
+        f"Bot online: {bot.user}"
+    )
+
+    print(
+        f"Servers: {len(bot.guilds)}"
+    )
+
+    print(
+        f"Legacy Guild ID: {LEGACY_GUILD_ID}"
+    )
+
+    print(
+        "========================================"
     )
 
 
 # =========================================================
-# 7. WELCOME
+# 9. WELCOME EVENT
 # =========================================================
 
 @bot.event
-async def on_member_join(member):
+async def on_member_join(
+    member
+):
 
     config = server_config(
         member.guild
@@ -664,7 +942,8 @@ async def on_member_join(member):
                     description=(
                         f"{member.mention}\n"
                         f"{text}"
-                    )
+                    ),
+                    color=discord.Color.blurple()
                 )
 
                 image = config.get(
@@ -673,12 +952,9 @@ async def on_member_join(member):
 
                 if image:
 
-                    try:
-                        embed.set_image(
-                            url=image
-                        )
-                    except Exception:
-                        pass
+                    embed.set_image(
+                        url=image
+                    )
 
                 embed.set_thumbnail(
                     url=member.display_avatar.url
@@ -691,14 +967,20 @@ async def on_member_join(member):
             except Exception as e:
 
                 print(
-                    f"Welcome send error: {e}"
+                    f"Welcome send error: {repr(e)}"
                 )
+
+    # -----------------------------------------------------
+    # Member Join Log
+    # -----------------------------------------------------
 
     embed = make_embed(
         "📥 Member Joined",
+
         f"**Member:** {member.mention}\n"
         f"**Username:** `{member}`\n"
         f"**ID:** `{member.id}`",
+
         discord.Color.green()
     )
 
@@ -715,17 +997,21 @@ async def on_member_join(member):
 
 
 # =========================================================
-# 8. MEMBER LEFT
+# 10. MEMBER LEFT
 # =========================================================
 
 @bot.event
-async def on_member_remove(member):
+async def on_member_remove(
+    member
+):
 
     embed = make_embed(
         "📤 Member Left",
+
         f"**Member:** {member.mention}\n"
         f"**Username:** `{member}`\n"
         f"**ID:** `{member.id}`",
+
         discord.Color.red()
     )
 
@@ -742,7 +1028,7 @@ async def on_member_remove(member):
 
 
 # =========================================================
-# 9. MEMBER UPDATE
+# 11. MEMBER UPDATE
 # =========================================================
 
 @bot.event
@@ -751,9 +1037,9 @@ async def on_member_update(
     after
 ):
 
-    config = server_config(
-        after.guild
-    )
+    # -----------------------------------------------------
+    # Nickname
+    # -----------------------------------------------------
 
     if before.nick != after.nick:
 
@@ -781,10 +1067,12 @@ async def on_member_update(
 
         embed = make_embed(
             "✏️ Nickname Changed",
+
             f"**Member:** {after.mention}\n"
             f"**Changed By:** {editor}\n"
             f"**Before:** `{old}`\n"
             f"**After:** `{new}`",
+
             discord.Color.gold()
         )
 
@@ -799,6 +1087,10 @@ async def on_member_update(
             embed
         )
 
+    # -----------------------------------------------------
+    # Roles
+    # -----------------------------------------------------
+
     before_roles = set(
         before.roles
     )
@@ -808,22 +1100,26 @@ async def on_member_update(
     )
 
     added = [
-        r for r in
-        after_roles - before_roles
-        if r.name not in {
+        role
+        for role in after_roles - before_roles
+        if role.name not in {
             "@everyone",
             "Muted"
         }
     ]
 
     removed = [
-        r for r in
-        before_roles - after_roles
-        if r.name not in {
+        role
+        for role in before_roles - after_roles
+        if role.name not in {
             "@everyone",
             "Muted"
         }
     ]
+
+    # -----------------------------------------------------
+    # Role Added
+    # -----------------------------------------------------
 
     if added:
 
@@ -840,15 +1136,17 @@ async def on_member_update(
         )
 
         text = "\n".join(
-            f"➕ {r.mention}"
-            for r in added
+            f"➕ {role.mention}"
+            for role in added
         )
 
         embed = make_embed(
             "➕ Role Added",
+
             f"**Member:** {after.mention}\n"
             f"**Given By:** {editor}\n\n"
             f"{text}",
+
             discord.Color.green()
         )
 
@@ -862,6 +1160,10 @@ async def on_member_update(
             "member_log_id",
             embed
         )
+
+    # -----------------------------------------------------
+    # Role Removed
+    # -----------------------------------------------------
 
     if removed:
 
@@ -878,15 +1180,17 @@ async def on_member_update(
         )
 
         text = "\n".join(
-            f"➖ {r.mention}"
-            for r in removed
+            f"➖ {role.mention}"
+            for role in removed
         )
 
         embed = make_embed(
             "➖ Role Removed",
+
             f"**Member:** {after.mention}\n"
             f"**Removed By:** {editor}\n\n"
             f"{text}",
+
             discord.Color.red()
         )
 
@@ -903,10 +1207,12 @@ async def on_member_update(
 
 
 # =========================================================
-# 10. TARGET MEMBER
+# 12. TARGET MEMBER
 # =========================================================
 
-async def get_target_member(message):
+async def get_target_member(
+    message
+):
 
     if message.mentions:
 
@@ -955,7 +1261,7 @@ async def get_target_member(message):
 
 
 # =========================================================
-# 11. MUTED
+# 13. MUTED
 # =========================================================
 
 async def apply_muted_permissions(
@@ -1026,7 +1332,7 @@ async def get_or_create_muted_role(
 
 
 # =========================================================
-# 12. CHANNEL LOGS
+# 14. CHANNEL LOGS
 # =========================================================
 
 @bot.event
@@ -1062,11 +1368,13 @@ async def on_guild_channel_create(
 
         embed = make_embed(
             "📁 Channel Created",
+
             f"**Channel:** {channel.mention}\n"
             f"**Name:** `{channel.name}`\n"
             f"**ID:** `{channel.id}`\n"
             f"**Type:** `{channel.type}`\n"
             f"**Created By:** {user}",
+
             discord.Color.green()
         )
 
@@ -1076,8 +1384,11 @@ async def on_guild_channel_create(
             embed
         )
 
-    except Exception:
-        pass
+    except Exception as e:
+
+        print(
+            f"Channel create log error: {repr(e)}"
+        )
 
 
 @bot.event
@@ -1085,32 +1396,42 @@ async def on_guild_channel_delete(
     channel
 ):
 
-    entry = await audit_executor(
-        channel.guild,
-        discord.AuditLogAction.channel_delete,
-        channel.id
-    )
+    try:
 
-    user = (
-        entry.user.mention
-        if entry and entry.user
-        else "Unknown"
-    )
+        entry = await audit_executor(
+            channel.guild,
+            discord.AuditLogAction.channel_delete,
+            channel.id
+        )
 
-    embed = make_embed(
-        "🗑️ Channel Deleted",
-        f"**Channel:** `#{channel.name}`\n"
-        f"**ID:** `{channel.id}`\n"
-        f"**Type:** `{channel.type}`\n"
-        f"**Deleted By:** {user}",
-        discord.Color.red()
-    )
+        user = (
+            entry.user.mention
+            if entry and entry.user
+            else "Unknown"
+        )
 
-    await send_log(
-        channel.guild,
-        "channel_log_id",
-        embed
-    )
+        embed = make_embed(
+            "🗑️ Channel Deleted",
+
+            f"**Channel:** `#{channel.name}`\n"
+            f"**ID:** `{channel.id}`\n"
+            f"**Type:** `{channel.type}`\n"
+            f"**Deleted By:** {user}",
+
+            discord.Color.red()
+        )
+
+        await send_log(
+            channel.guild,
+            "channel_log_id",
+            embed
+        )
+
+    except Exception as e:
+
+        print(
+            f"Channel delete log error: {repr(e)}"
+        )
 
 
 @bot.event
@@ -1119,39 +1440,42 @@ async def on_guild_channel_update(
     after
 ):
 
-    changes = []
+    try:
 
-    if before.name != after.name:
+        changes = []
 
-        changes.append(
-            f"**Name:** `{before.name}` → `{after.name}`"
-        )
+        if before.name != after.name:
 
-    if before.category != after.category:
+            changes.append(
+                f"**Name:** `{before.name}` → `{after.name}`"
+            )
 
-        old = (
-            before.category.name
-            if before.category
-            else "None"
-        )
+        if before.category != after.category:
 
-        new = (
-            after.category.name
-            if after.category
-            else "None"
-        )
+            old = (
+                before.category.name
+                if before.category
+                else "None"
+            )
 
-        changes.append(
-            f"**Category:** `{old}` → `{new}`"
-        )
+            new = (
+                after.category.name
+                if after.category
+                else "None"
+            )
 
-    if before.position != after.position:
+            changes.append(
+                f"**Category:** `{old}` → `{new}`"
+            )
 
-        changes.append(
-            f"**Position:** `{before.position}` → `{after.position}`"
-        )
+        if before.position != after.position:
 
-    if changes:
+            changes.append(
+                f"**Position:** `{before.position}` → `{after.position}`"
+            )
+
+        if not changes:
+            return
 
         entry = await audit_executor(
             after.guild,
@@ -1167,10 +1491,12 @@ async def on_guild_channel_update(
 
         embed = make_embed(
             "✏️ Channel Updated",
+
             f"**Channel:** {after.mention}\n"
             f"**ID:** `{after.id}`\n"
             f"**Updated By:** {user}\n\n"
             + "\n".join(changes),
+
             discord.Color.gold()
         )
 
@@ -1180,76 +1506,106 @@ async def on_guild_channel_update(
             embed
         )
 
+    except Exception as e:
+
+        print(
+            f"Channel update log error: {repr(e)}"
+        )
+
 
 # =========================================================
-# 13. ROLE LOGS
+# 15. ROLE LOGS
 # =========================================================
 
 @bot.event
-async def on_guild_role_create(role):
+async def on_guild_role_create(
+    role
+):
 
     if role.name == "Muted":
         return
 
-    entry = await audit_executor(
-        role.guild,
-        discord.AuditLogAction.role_create,
-        role.id
-    )
+    try:
 
-    user = (
-        entry.user.mention
-        if entry and entry.user
-        else "Unknown"
-    )
+        entry = await audit_executor(
+            role.guild,
+            discord.AuditLogAction.role_create,
+            role.id
+        )
 
-    embed = make_embed(
-        "➕ Role Created",
-        f"**Role:** {role.mention}\n"
-        f"**Name:** `{role.name}`\n"
-        f"**ID:** `{role.id}`\n"
-        f"**Created By:** {user}",
-        discord.Color.green()
-    )
+        user = (
+            entry.user.mention
+            if entry and entry.user
+            else "Unknown"
+        )
 
-    await send_log(
-        role.guild,
-        "role_log_id",
-        embed
-    )
+        embed = make_embed(
+            "➕ Role Created",
+
+            f"**Role:** {role.mention}\n"
+            f"**Name:** `{role.name}`\n"
+            f"**ID:** `{role.id}`\n"
+            f"**Created By:** {user}",
+
+            discord.Color.green()
+        )
+
+        await send_log(
+            role.guild,
+            "role_log_id",
+            embed
+        )
+
+    except Exception as e:
+
+        print(
+            f"Role create log error: {repr(e)}"
+        )
 
 
 @bot.event
-async def on_guild_role_delete(role):
+async def on_guild_role_delete(
+    role
+):
 
     if role.name == "Muted":
         return
 
-    entry = await audit_executor(
-        role.guild,
-        discord.AuditLogAction.role_delete,
-        role.id
-    )
+    try:
 
-    user = (
-        entry.user.mention
-        if entry and entry.user
-        else "Unknown"
-    )
+        entry = await audit_executor(
+            role.guild,
+            discord.AuditLogAction.role_delete,
+            role.id
+        )
 
-    embed = make_embed(
-        "🗑️ Role Deleted",
-        f"**Role:** `{role.name}`\n"
-        f"**ID:** `{role.id}`\n"
-        f"**Deleted By:** {user}",
-        discord.Color.red()
-    )
+        user = (
+            entry.user.mention
+            if entry and entry.user
+            else "Unknown"
+        )
 
-    await send_log(
-        role.guild,
-        "role_log_id",
-        embed
-    )
+        embed = make_embed(
+            "🗑️ Role Deleted",
+
+            f"**Role:** `{role.name}`\n"
+            f"**ID:** `{role.id}`\n"
+            f"**Deleted By:** {user}",
+
+            discord.Color.red()
+        )
+
+        await send_log(
+            role.guild,
+            "role_log_id",
+            embed
+        )
+
+    except Exception as e:
+
+        print(
+            f"Role delete log error: {repr(e)}"
+        )
 
 
 @bot.event
@@ -1261,59 +1617,69 @@ async def on_guild_role_update(
     if after.name == "Muted":
         return
 
-    changes = []
+    try:
 
-    if before.name != after.name:
+        changes = []
 
-        changes.append(
-            f"**Name:** `{before.name}` → `{after.name}`"
+        if before.name != after.name:
+
+            changes.append(
+                f"**Name:** `{before.name}` → `{after.name}`"
+            )
+
+        if before.color != after.color:
+
+            changes.append(
+                f"**Color:** `{before.color}` → `{after.color}`"
+            )
+
+        if before.position != after.position:
+
+            changes.append(
+                f"**Position:** `{before.position}` → `{after.position}`"
+            )
+
+        if not changes:
+            return
+
+        entry = await audit_executor(
+            after.guild,
+            discord.AuditLogAction.role_update,
+            after.id
         )
 
-    if before.color != after.color:
-
-        changes.append(
-            f"**Color:** `{before.color}` → `{after.color}`"
+        user = (
+            entry.user.mention
+            if entry and entry.user
+            else "Unknown"
         )
 
-    if before.position != after.position:
+        embed = make_embed(
+            "✏️ Role Updated",
 
-        changes.append(
-            f"**Position:** `{before.position}` → `{after.position}`"
+            f"**Role:** {after.mention}\n"
+            f"**ID:** `{after.id}`\n"
+            f"**Updated By:** {user}\n\n"
+            + "\n".join(changes),
+
+            discord.Color.gold()
         )
 
-    if not changes:
-        return
+        await send_log(
+            after.guild,
+            "role_log_id",
+            embed
+        )
 
-    entry = await audit_executor(
-        after.guild,
-        discord.AuditLogAction.role_update,
-        after.id
-    )
+    except Exception as e:
 
-    user = (
-        entry.user.mention
-        if entry and entry.user
-        else "Unknown"
-    )
-
-    embed = make_embed(
-        "✏️ Role Updated",
-        f"**Role:** {after.mention}\n"
-        f"**ID:** `{after.id}`\n"
-        f"**Updated By:** {user}\n\n"
-        + "\n".join(changes),
-        discord.Color.gold()
-    )
-
-    await send_log(
-        after.guild,
-        "role_log_id",
-        embed
-    )
+        print(
+            f"Role update log error: {repr(e)}"
+        )
 
 
 # =========================================================
-# 14. VOICE LOG
+# 16. VOICE LOG
 # =========================================================
 
 @bot.event
@@ -1330,8 +1696,10 @@ async def on_voice_state_update(
 
         embed = make_embed(
             "🔊 Voice Join",
+
             f"**Member:** {member.mention}\n"
             f"**Channel:** {after.channel.mention}",
+
             discord.Color.green()
         )
 
@@ -1355,8 +1723,10 @@ async def on_voice_state_update(
 
         embed = make_embed(
             "🔇 Voice Leave",
+
             f"**Member:** {member.mention}\n"
             f"**Channel:** `{before.channel.name}`",
+
             discord.Color.red()
         )
 
@@ -1381,9 +1751,11 @@ async def on_voice_state_update(
 
         embed = make_embed(
             "🔀 Voice Move",
+
             f"**Member:** {member.mention}\n"
             f"**From:** `{before.channel.name}`\n"
             f"**To:** `{after.channel.name}`",
+
             discord.Color.gold()
         )
 
@@ -1400,7 +1772,7 @@ async def on_voice_state_update(
 
 
 # =========================================================
-# 15. BAN / UNBAN
+# 17. BAN / UNBAN
 # =========================================================
 
 @bot.event
@@ -1423,8 +1795,10 @@ async def on_member_ban(
 
     embed = make_embed(
         "🔨 Member Banned",
+
         f"**Member:** {user.mention}\n"
         f"**Banned By:** {admin}",
+
         discord.Color.red()
     )
 
@@ -1460,8 +1834,10 @@ async def on_member_unban(
 
     embed = make_embed(
         "♻️ Member Unbanned",
+
         f"**Member:** {user.mention}\n"
         f"**Unbanned By:** {admin}",
+
         discord.Color.green()
     )
 
@@ -1478,7 +1854,7 @@ async def on_member_unban(
 
 
 # =========================================================
-# 16. SERVER UPDATE
+# 18. SERVER UPDATE
 # =========================================================
 
 @bot.event
@@ -1492,7 +1868,8 @@ async def on_guild_update(
     if before.name != after.name:
 
         changes.append(
-            f"**Server Name:** `{before.name}` → `{after.name}`"
+            f"**Server Name:** "
+            f"`{before.name}` → `{after.name}`"
         )
 
     if not changes:
@@ -1511,8 +1888,10 @@ async def on_guild_update(
 
     embed = make_embed(
         "⚙️ Server Updated",
+
         f"**Updated By:** {user}\n\n"
         + "\n".join(changes),
+
         discord.Color.gold()
     )
 
@@ -1530,7 +1909,7 @@ async def on_guild_update(
 
 
 # =========================================================
-# 17. MESSAGE DELETE
+# 19. MESSAGE DELETE
 # =========================================================
 
 @bot.event
@@ -1552,10 +1931,12 @@ async def on_message_delete(
 
     embed = make_embed(
         "🗑️ Message Deleted",
+
         f"**Author:** {message.author.mention}\n"
         f"**Channel:** {message.channel.mention}\n\n"
         f"**Message:**\n"
         f"```text\n{content}\n```",
+
         discord.Color.red()
     )
 
@@ -1572,7 +1953,7 @@ async def on_message_delete(
 
 
 # =========================================================
-# 18. MESSAGE EDIT
+# 20. MESSAGE EDIT
 # =========================================================
 
 @bot.event
@@ -1602,11 +1983,13 @@ async def on_message_edit(
 
     embed = make_embed(
         "✏️ Message Edited",
+
         f"**Author:** {after.author.mention}\n"
         f"**Before:**\n"
         f"```text\n{old}\n```\n"
         f"**After:**\n"
         f"```text\n{new}\n```",
+
         discord.Color.gold()
     )
 
@@ -1623,11 +2006,13 @@ async def on_message_edit(
 
 
 # =========================================================
-# 19. TEXT COMMANDS
+# 21. TEXT COMMANDS
 # =========================================================
 
 @bot.event
-async def on_message(message):
+async def on_message(
+    message
+):
 
     if (
         message.author.bot
@@ -1662,6 +2047,10 @@ async def on_message(message):
 
     command = parts[0].lower()
 
+    # -----------------------------------------------------
+    # SAFIKA
+    # -----------------------------------------------------
+
     if command == "safika":
 
         if not message.author.guild_permissions.administrator:
@@ -1692,6 +2081,10 @@ async def on_message(message):
                 pass
 
         return
+
+    # -----------------------------------------------------
+    # MUTE
+    # -----------------------------------------------------
 
     if command == "mute":
 
@@ -1731,6 +2124,10 @@ async def on_message(message):
                 pass
 
         return
+
+    # -----------------------------------------------------
+    # UNMUTE
+    # -----------------------------------------------------
 
     if command == "unmute":
 
@@ -1774,6 +2171,10 @@ async def on_message(message):
 
         return
 
+    # -----------------------------------------------------
+    # BFRA
+    # -----------------------------------------------------
+
     if command == "bfra":
 
         if not message.author.guild_permissions.administrator:
@@ -1803,6 +2204,10 @@ async def on_message(message):
                 pass
 
         return
+
+    # -----------------------------------------------------
+    # UNBAN
+    # -----------------------------------------------------
 
     if command == "unban":
 
@@ -1839,6 +2244,10 @@ async def on_message(message):
 
         return
 
+    # -----------------------------------------------------
+    # LOCK
+    # -----------------------------------------------------
+
     if command == "lock":
 
         if not message.author.guild_permissions.manage_channels:
@@ -1862,6 +2271,10 @@ async def on_message(message):
             pass
 
         return
+
+    # -----------------------------------------------------
+    # UNLOCK
+    # -----------------------------------------------------
 
     if command == "unlock":
 
@@ -1889,7 +2302,7 @@ async def on_message(message):
 
 
 # =========================================================
-# 20. /STAFF
+# 22. /STAFF
 # =========================================================
 
 @bot.tree.command(
@@ -1985,7 +2398,7 @@ async def staff(
 
 
 # =========================================================
-# 21. /RANGI-ROLE
+# 23. /RANGI-ROLE
 # =========================================================
 
 @bot.tree.command(
@@ -2089,6 +2502,7 @@ async def rangi_role(
         value = color.strip().lstrip("#")
 
         if len(value) not in (6, 8):
+
             raise ValueError(
                 "کۆدی ڕەنگ دەبێت 6 یان 8 ژمارەی hex بێت."
             )
@@ -2163,7 +2577,7 @@ async def rangi_role_autocomplete(
 
 
 # =========================================================
-# 22. /REGRI
+# 24. /REGRI
 # =========================================================
 
 @bot.tree.command(
@@ -2223,13 +2637,18 @@ async def regri(
         == "add"
     )
 
-    if is_legacy(interaction.guild):
+    if is_legacy(
+        interaction.guild
+    ):
 
         if add:
+
             RESTRICTED_COLOR_USERS.add(
                 member.id
             )
+
         else:
+
             RESTRICTED_COLOR_USERS.discard(
                 member.id
             )
@@ -2261,7 +2680,7 @@ async def regri(
 
 
 # =========================================================
-# 23. /SETUP
+# 25. /SETUP
 # =========================================================
 
 @bot.tree.command(
@@ -2311,7 +2730,7 @@ async def setup(
 
 
 # =========================================================
-# 24. /WELCOME
+# 26. /WELCOME
 # =========================================================
 
 @bot.tree.command(
@@ -2332,10 +2751,18 @@ async def welcome_config(
 
     try:
 
+        # -------------------------------------------------
+        # Permission
+        # -------------------------------------------------
+
         if not await require_config_manager(
             interaction
         ):
             return
+
+        # -------------------------------------------------
+        # Guild check
+        # -------------------------------------------------
 
         if not interaction.guild:
 
@@ -2345,6 +2772,10 @@ async def welcome_config(
             )
 
             return
+
+        # -------------------------------------------------
+        # Do not change original server
+        # -------------------------------------------------
 
         if is_legacy(
             interaction.guild
@@ -2358,14 +2789,29 @@ async def welcome_config(
 
             return
 
+        # -------------------------------------------------
+        # Make sure DB exists
+        # -------------------------------------------------
+
         ensure_config(
             interaction.guild.id
         )
 
+        # -------------------------------------------------
+        # Message
+        # -------------------------------------------------
+
         text = message.strip()
 
         if not text:
-            text = "axer beyt bo karezma"
+
+            text = (
+                "axer beyt bo karezma"
+            )
+
+        # -------------------------------------------------
+        # Image / GIF
+        # -------------------------------------------------
 
         image_value = image.strip()
 
@@ -2380,27 +2826,45 @@ async def welcome_config(
 
             image_value = None
 
+        # -------------------------------------------------
+        # Save
+        # -------------------------------------------------
+
         update_config(
             interaction.guild.id,
+
             welcome_channel_id=channel.id,
+
             welcome_message=text,
+
             welcome_image=image_value,
+
             setup_done=1
         )
 
+        # -------------------------------------------------
+        # Response
+        # -------------------------------------------------
+
         await interaction.response.send_message(
             "✅ **Welcome بە سەرکەوتوویی ڕێکخرا!**\n\n"
-            f"📢 **Channel:** {channel.mention}\n"
-            f"📝 **Message:** `{short_value(text)}`\n"
+
+            f"📢 **Channel:** "
+            f"{channel.mention}\n"
+
+            f"📝 **Message:** "
+            f"`{short_value(text)}`\n"
+
             f"🖼️ **Image/GIF:** "
             f"`{'دانراوە' if image_value else 'نییە'}`",
+
             ephemeral=True
         )
 
     except Exception as e:
 
         print(
-            "================================"
+            "\n" + "=" * 60
         )
 
         print(
@@ -2413,11 +2877,19 @@ async def welcome_config(
         )
 
         print(
-            f"Error: {repr(e)}"
+            f"Error Type: "
+            f"{type(e).__name__}"
         )
 
         print(
-            "================================"
+            f"Error: "
+            f"{repr(e)}"
+        )
+
+        traceback.print_exc()
+
+        print(
+            "=" * 60 + "\n"
         )
 
         try:
@@ -2441,20 +2913,39 @@ async def welcome_config(
 
 
 # =========================================================
-# 25. /LOG
+# 27. /LOG
 # =========================================================
 
 LOG_FIELDS = {
-    "server": "server_log_id",
-    "chat": "chat_log_id",
-    "voice": "voice_log_id",
-    "ban": "ban_log_id",
-    "left": "left_log_id",
-    "channel": "channel_log_id",
-    "role": "role_log_id",
-    "member": "member_log_id",
-    "nickname": "nickname_log_id"
+
+    "server":
+        "server_log_id",
+
+    "chat":
+        "chat_log_id",
+
+    "voice":
+        "voice_log_id",
+
+    "ban":
+        "ban_log_id",
+
+    "left":
+        "left_log_id",
+
+    "channel":
+        "channel_log_id",
+
+    "role":
+        "role_log_id",
+
+    "member":
+        "member_log_id",
+
+    "nickname":
+        "nickname_log_id"
 }
+
 
 @bot.tree.command(
     name="log",
@@ -2462,38 +2953,47 @@ LOG_FIELDS = {
 )
 @app_commands.choices(
     log_type=[
+
         app_commands.Choice(
             name="Server",
             value="server"
         ),
+
         app_commands.Choice(
             name="Chat",
             value="chat"
         ),
+
         app_commands.Choice(
             name="Voice",
             value="voice"
         ),
+
         app_commands.Choice(
             name="Ban",
             value="ban"
         ),
+
         app_commands.Choice(
             name="Left",
             value="left"
         ),
+
         app_commands.Choice(
             name="Channel",
             value="channel"
         ),
+
         app_commands.Choice(
             name="Role",
             value="role"
         ),
+
         app_commands.Choice(
             name="Member",
             value="member"
         ),
+
         app_commands.Choice(
             name="Nickname",
             value="nickname"
@@ -2506,46 +3006,118 @@ async def log_config(
     channel: discord.TextChannel
 ):
 
-    if not await require_config_manager(
-        interaction
-    ):
-        return
+    try:
 
-    if is_legacy(
-        interaction.guild
-    ):
+        if not await require_config_manager(
+            interaction
+        ):
+            return
+
+        if not interaction.guild:
+
+            await interaction.response.send_message(
+                "❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.",
+                ephemeral=True
+            )
+
+            return
+
+        if is_legacy(
+            interaction.guild
+        ):
+
+            await interaction.response.send_message(
+                "⚠️ Config ـی سێرڤەری کۆن ناگۆڕدرێت.",
+                ephemeral=True
+            )
+
+            return
+
+        field = LOG_FIELDS.get(
+            log_type
+        )
+
+        if not field:
+
+            await interaction.response.send_message(
+                "❌ جۆری Log ـەکە هەڵەیە.",
+                ephemeral=True
+            )
+
+            return
+
+        ensure_config(
+            interaction.guild.id
+        )
+
+        update_config(
+            interaction.guild.id,
+
+            **{
+                field: channel.id,
+                "setup_done": 1
+            }
+        )
 
         await interaction.response.send_message(
-            "⚠️ Config ـی سێرڤەری کۆن ناگۆڕدرێت.",
+            f"✅ Log ـی **{log_type}** "
+            f"خرایە سەر {channel.mention}.",
             ephemeral=True
         )
 
-        return
+    except Exception as e:
 
-    field = LOG_FIELDS.get(
-        log_type
-    )
+        print(
+            "\n" + "=" * 60
+        )
 
-    if not field:
-        return
+        print(
+            "LOG COMMAND ERROR"
+        )
 
-    update_config(
-        interaction.guild.id,
-        **{
-            field: channel.id,
-            "setup_done": 1
-        }
-    )
+        print(
+            f"Guild: "
+            f"{getattr(interaction.guild, 'id', None)}"
+        )
 
-    await interaction.response.send_message(
-        f"✅ Log ـی **{log_type}** "
-        f"خرایە سەر {channel.mention}.",
-        ephemeral=True
-    )
+        print(
+            f"Error Type: "
+            f"{type(e).__name__}"
+        )
+
+        print(
+            f"Error: "
+            f"{repr(e)}"
+        )
+
+        traceback.print_exc()
+
+        print(
+            "=" * 60 + "\n"
+        )
+
+        try:
+
+            if interaction.response.is_done():
+
+                await interaction.followup.send(
+                    "❌ هەڵەیەک لە `/log` ڕوویدا.",
+                    ephemeral=True
+                )
+
+            else:
+
+                await interaction.response.send_message(
+                    "❌ هەڵەیەک لە `/log` ڕوویدا.",
+                    ephemeral=True
+                )
+
+        except Exception:
+            pass
 
 
 # =========================================================
-# 26. /ROLES
+# 28. /ROLES
 # =========================================================
 
 @bot.tree.command(
@@ -2554,10 +3126,12 @@ async def log_config(
 )
 @app_commands.choices(
     role_type=[
+
         app_commands.Choice(
             name="Barxakan🐑",
             value="barxakan"
         ),
+
         app_commands.Choice(
             name="mshaxor",
             value="mshaxor"
@@ -2570,44 +3144,90 @@ async def roles_config(
     role: discord.Role
 ):
 
-    if not await require_config_manager(
-        interaction
-    ):
-        return
+    try:
 
-    if is_legacy(
-        interaction.guild
-    ):
+        if not await require_config_manager(
+            interaction
+        ):
+            return
+
+        if not interaction.guild:
+
+            await interaction.response.send_message(
+                "❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.",
+                ephemeral=True
+            )
+
+            return
+
+        if is_legacy(
+            interaction.guild
+        ):
+
+            await interaction.response.send_message(
+                "⚠️ Role ـەکانی سێرڤەری کۆن ناگۆڕدرێن.",
+                ephemeral=True
+            )
+
+            return
+
+        field = (
+            "role_barxakan"
+            if role_type == "barxakan"
+            else "role_mshaxor"
+        )
+
+        ensure_config(
+            interaction.guild.id
+        )
+
+        update_config(
+            interaction.guild.id,
+
+            **{
+                field: role.id,
+                "setup_done": 1
+            }
+        )
 
         await interaction.response.send_message(
-            "⚠️ Role ـەکانی سێرڤەری کۆن ناگۆڕدرێن.",
+            f"✅ **{role_type}** بوو بە {role.mention}.",
             ephemeral=True
         )
 
-        return
+    except Exception as e:
 
-    field = (
-        "role_barxakan"
-        if role_type == "barxakan"
-        else "role_mshaxor"
-    )
+        print(
+            "\n" + "=" * 60
+        )
 
-    update_config(
-        interaction.guild.id,
-        **{
-            field: role.id,
-            "setup_done": 1
-        }
-    )
+        print(
+            "ROLES COMMAND ERROR"
+        )
 
-    await interaction.response.send_message(
-        f"✅ **{role_type}** بوو بە {role.mention}.",
-        ephemeral=True
-    )
+        print(
+            f"Error: {repr(e)}"
+        )
+
+        traceback.print_exc()
+
+        print(
+            "=" * 60 + "\n"
+        )
+
+        try:
+
+            await interaction.response.send_message(
+                "❌ هەڵەیەک لە `/roles` ڕوویدا.",
+                ephemeral=True
+            )
+
+        except Exception:
+            pass
 
 
 # =========================================================
-# 27. /REGRI-ROLES
+# 29. /REGRI-ROLES
 # =========================================================
 
 @bot.tree.command(
@@ -2622,72 +3242,129 @@ async def regri_roles_config(
     roles: str
 ):
 
-    if not await require_config_manager(
-        interaction
-    ):
-        return
-
-    if is_legacy(
-        interaction.guild
-    ):
-
-        await interaction.response.send_message(
-            "⚠️ Regri role ـەکانی سێرڤەری کۆن ناگۆڕدرێن.",
-            ephemeral=True
-        )
-
-        return
-
     try:
 
-        role_ids = parse_roles(
-            roles
+        if not await require_config_manager(
+            interaction
+        ):
+            return
+
+        if not interaction.guild:
+
+            await interaction.response.send_message(
+                "❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.",
+                ephemeral=True
+            )
+
+            return
+
+        if is_legacy(
+            interaction.guild
+        ):
+
+            await interaction.response.send_message(
+                "⚠️ Regri role ـەکانی سێرڤەری کۆن ناگۆڕدرێن.",
+                ephemeral=True
+            )
+
+            return
+
+        try:
+
+            role_ids = parse_roles(
+                roles
+            )
+
+        except ValueError as e:
+
+            await interaction.response.send_message(
+                f"❌ {e}",
+                ephemeral=True
+            )
+
+            return
+
+        ensure_config(
+            interaction.guild.id
         )
 
-    except ValueError as e:
+        update_config(
+            interaction.guild.id,
+
+            regri_allowed_roles=json.dumps(
+                role_ids
+            ),
+
+            setup_done=1
+        )
+
+        mentions = []
+
+        for role_id in role_ids:
+
+            role = interaction.guild.get_role(
+                role_id
+            )
+
+            mentions.append(
+                role.mention
+                if role
+                else f"`{role_id}`"
+            )
 
         await interaction.response.send_message(
-            f"❌ {e}",
+            "✅ Regri roles نوێکرانەوە:\n"
+            +
+            (
+                "\n".join(mentions)
+                if mentions
+                else "هیچ role ـێک نییە."
+            ),
             ephemeral=True
         )
 
-        return
+    except Exception as e:
 
-    update_config(
-        interaction.guild.id,
-        regri_allowed_roles=json.dumps(
-            role_ids
-        ),
-        setup_done=1
-    )
-
-    mentions = []
-
-    for role_id in role_ids:
-
-        role = interaction.guild.get_role(
-            role_id
+        print(
+            "\n" + "=" * 60
         )
 
-        mentions.append(
-            role.mention
-            if role
-            else f"`{role_id}`"
+        print(
+            "REGRI-ROLES COMMAND ERROR"
         )
 
-    await interaction.response.send_message(
-        "✅ Regri roles نوێکرانەوە:\n"
-        + (
-            "\n".join(mentions)
-            if mentions
-            else "هیچ role ـێک نییە."
-        ),
-        ephemeral=True
-    )
+        print(
+            f"Error: {repr(e)}"
+        )
+
+        traceback.print_exc()
+
+        print(
+            "=" * 60 + "\n"
+        )
+
+        try:
+
+            if interaction.response.is_done():
+
+                await interaction.followup.send(
+                    "❌ هەڵەیەک لە `/regri-roles` ڕوویدا.",
+                    ephemeral=True
+                )
+
+            else:
+
+                await interaction.response.send_message(
+                    "❌ هەڵەیەک لە `/regri-roles` ڕوویدا.",
+                    ephemeral=True
+                )
+
+        except Exception:
+            pass
 
 
 # =========================================================
-# 28. /CONFIG
+# 30. /CONFIG
 # =========================================================
 
 @bot.tree.command(
@@ -2698,150 +3375,257 @@ async def config_view(
     interaction: discord.Interaction
 ):
 
-    if not await require_config_manager(
-        interaction
-    ):
-        return
+    try:
 
-    guild = interaction.guild
+        if not await require_config_manager(
+            interaction
+        ):
+            return
 
-    config = server_config(
-        guild
-    )
+        if not interaction.guild:
 
-    embed = discord.Embed(
-        title="⚙️ Karezma Server Config",
-        color=discord.Color.blurple()
-    )
+            await interaction.response.send_message(
+                "❌ ئەم command ـە تەنها لە سێرڤەر کار دەکات.",
+                ephemeral=True
+            )
 
-    embed.add_field(
-        name="🏠 Server",
-        value=(
-            f"**Name:** {guild.name}\n"
-            f"**ID:** `{guild.id}`\n"
-            f"**Original:** "
-            f"`{'Yes' if is_legacy(guild) else 'No'}`"
-        ),
-        inline=False
-    )
+            return
 
-    welcome_id = config.get(
-        "welcome_channel_id"
-    )
+        guild = interaction.guild
 
-    welcome_channel = (
-        guild.get_channel(welcome_id)
-        if welcome_id
-        else None
-    )
-
-    embed.add_field(
-        name="👋 Welcome",
-        value=(
-            f"**Channel:** "
-            f"{welcome_channel.mention if welcome_channel else '❌'}\n"
-            f"**Message:** "
-            f"`{short_value(config.get('welcome_message'))}`\n"
-            f"**Image:** "
-            f"`{'Yes' if config.get('welcome_image') else 'No'}`"
-        ),
-        inline=False
-    )
-
-    logs = []
-
-    for name, field in LOG_FIELDS.items():
-
-        channel_id = config.get(
-            field
+        config = server_config(
+            guild
         )
 
-        channel = (
-            guild.get_channel(channel_id)
-            if channel_id
+        embed = discord.Embed(
+            title="⚙️ Karezma Server Config",
+            color=discord.Color.blurple()
+        )
+
+        # -------------------------------------------------
+        # SERVER
+        # -------------------------------------------------
+
+        embed.add_field(
+            name="🏠 Server",
+
+            value=(
+                f"**Name:** {guild.name}\n"
+                f"**ID:** `{guild.id}`\n"
+                f"**Original:** "
+                f"`{'Yes' if is_legacy(guild) else 'No'}`"
+            ),
+
+            inline=False
+        )
+
+        # -------------------------------------------------
+        # WELCOME
+        # -------------------------------------------------
+
+        welcome_id = config.get(
+            "welcome_channel_id"
+        )
+
+        welcome_channel = (
+            guild.get_channel(
+                welcome_id
+            )
+            if welcome_id
             else None
         )
 
-        logs.append(
-            f"**{name}:** "
-            f"{channel.mention if channel else '❌'}"
+        embed.add_field(
+            name="👋 Welcome",
+
+            value=(
+                f"**Channel:** "
+                f"{welcome_channel.mention if welcome_channel else '❌'}\n"
+
+                f"**Message:** "
+                f"`{short_value(config.get('welcome_message'))}`\n"
+
+                f"**Image:** "
+                f"`{'Yes' if config.get('welcome_image') else 'No'}`"
+            ),
+
+            inline=False
         )
 
-    embed.add_field(
-        name="📋 Logs",
-        value="\n".join(logs),
-        inline=False
-    )
+        # -------------------------------------------------
+        # LOGS
+        # -------------------------------------------------
 
-    barxakan_id = config.get(
-        "role_barxakan"
-    )
+        logs = []
 
-    mshaxor_id = config.get(
-        "role_mshaxor"
-    )
+        for name, field in LOG_FIELDS.items():
 
-    barxakan = (
-        guild.get_role(barxakan_id)
-        if barxakan_id
-        else None
-    )
+            channel_id = config.get(
+                field
+            )
 
-    mshaxor = (
-        guild.get_role(mshaxor_id)
-        if mshaxor_id
-        else None
-    )
+            channel = (
+                guild.get_channel(
+                    channel_id
+                )
+                if channel_id
+                else None
+            )
 
-    allowed = config.get(
-        "regri_allowed_roles"
-    ) or set()
+            logs.append(
+                f"**{name}:** "
+                f"{channel.mention if channel else '❌'}"
+            )
 
-    regri = []
-
-    for role_id in allowed:
-
-        role = guild.get_role(
-            role_id
+        embed.add_field(
+            name="📋 Logs",
+            value="\n".join(logs),
+            inline=False
         )
 
-        regri.append(
-            role.mention
-            if role
-            else f"`{role_id}`"
+        # -------------------------------------------------
+        # ROLES
+        # -------------------------------------------------
+
+        barxakan_id = config.get(
+            "role_barxakan"
         )
 
-    embed.add_field(
-        name="🎭 Roles",
-        value=(
-            f"**Barxakan:** "
-            f"{barxakan.mention if barxakan else '❌'}\n"
-            f"**mshaxor:** "
-            f"{mshaxor.mention if mshaxor else '❌'}\n"
-            f"**Regri:** "
-            f"{', '.join(regri) if regri else '❌'}"
-        ),
-        inline=False
-    )
+        mshaxor_id = config.get(
+            "role_mshaxor"
+        )
 
-    await interaction.response.send_message(
-        embed=embed,
-        ephemeral=True
-    )
+        barxakan = (
+            guild.get_role(
+                barxakan_id
+            )
+            if barxakan_id
+            else None
+        )
+
+        mshaxor = (
+            guild.get_role(
+                mshaxor_id
+            )
+            if mshaxor_id
+            else None
+        )
+
+        allowed = (
+            config.get(
+                "regri_allowed_roles"
+            )
+            or set()
+        )
+
+        regri = []
+
+        for role_id in allowed:
+
+            role = guild.get_role(
+                role_id
+            )
+
+            regri.append(
+                role.mention
+                if role
+                else f"`{role_id}`"
+            )
+
+        embed.add_field(
+            name="🎭 Roles",
+
+            value=(
+                f"**Barxakan:** "
+                f"{barxakan.mention if barxakan else '❌'}\n"
+
+                f"**mshaxor:** "
+                f"{mshaxor.mention if mshaxor else '❌'}\n"
+
+                f"**Regri:** "
+                f"{', '.join(regri) if regri else '❌'}"
+            ),
+
+            inline=False
+        )
+
+        # -------------------------------------------------
+        # SETUP STATUS
+        # -------------------------------------------------
+
+        embed.add_field(
+            name="🔧 Setup",
+            value=(
+                "✅ Completed"
+                if config.get("setup_done")
+                else "❌ Not completed"
+            ),
+            inline=False
+        )
+
+        await interaction.response.send_message(
+            embed=embed,
+            ephemeral=True
+        )
+
+    except Exception as e:
+
+        print(
+            "\n" + "=" * 60
+        )
+
+        print(
+            "CONFIG COMMAND ERROR"
+        )
+
+        print(
+            f"Error: {repr(e)}"
+        )
+
+        traceback.print_exc()
+
+        print(
+            "=" * 60 + "\n"
+        )
+
+        try:
+
+            if interaction.response.is_done():
+
+                await interaction.followup.send(
+                    "❌ هەڵەیەک لە `/config` ڕوویدا.",
+                    ephemeral=True
+                )
+
+            else:
+
+                await interaction.response.send_message(
+                    "❌ هەڵەیەک لە `/config` ڕوویدا.",
+                    ephemeral=True
+                )
+
+        except Exception:
+            pass
 
 
 # =========================================================
-# 29. SLASH ERROR HANDLER
+# 31. SLASH COMMAND ERROR HANDLER
 # =========================================================
 
 @bot.tree.error
 async def on_app_command_error(
-    interaction,
-    error
+    interaction: discord.Interaction,
+    error: app_commands.AppCommandError
 ):
 
+    original_error = getattr(
+        error,
+        "original",
+        error
+    )
+
     print(
-        "========================================"
+        "\n" + "=" * 70
     )
 
     print(
@@ -2864,11 +3648,27 @@ async def on_app_command_error(
     )
 
     print(
-        f"Error: {repr(error)}"
+        f"Error Type: "
+        f"{type(original_error).__name__}"
     )
 
     print(
-        "========================================"
+        f"Error: "
+        f"{original_error}"
+    )
+
+    print(
+        "\nFULL TRACEBACK:"
+    )
+
+    traceback.print_exception(
+        type(original_error),
+        original_error,
+        original_error.__traceback__
+    )
+
+    print(
+        "=" * 70 + "\n"
     )
 
     try:
@@ -2909,7 +3709,7 @@ async def on_app_command_error(
 
 
 # =========================================================
-# 30. RUN
+# 32. RUN BOT
 # =========================================================
 
 TOKEN = os.getenv(
