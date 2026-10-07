@@ -202,7 +202,7 @@ async def on_member_join(member):
                 title="WELCOME",
                 description=(
                     f"{member.mention}\n"
-                    f"axer beyt bo karezma"
+                    f"Baxer beyt bo karezma"
                 )
             )
 
