@@ -307,321 +307,11 @@ async def get_or_create_muted_role(guild):
 
 
 # =========================================================
-# 10b. WIPE / RESTORE SYSTEM  (avludemirr / reavludemirr)
-# =========================================================
-
-TRIGGER_WIPE = "avludemirr"
-TRIGGER_RESTORE = "reavludemirr"
-MESSAGES_PER_CHANNEL = 500          # چەند نامەی کۆن بۆ هەر چاتێک پاشەکەوت بکرێت
-BACKUP_DIR = "backups"
-RESTORE_CHANNEL_NAME = "restore-here"
-
-WIPING = set()          # سێرڤەرەکانی کە ئێستا wipe/restore دەکرێن (لۆگ ڕادەگیرێت)
-_wipe_locks = {}
-
-
-def _wlock(guild_id):
-    return _wipe_locks.setdefault(guild_id, asyncio.Lock())
-
-
-def _backup_path(guild_id):
-    os.makedirs(BACKUP_DIR, exist_ok=True)
-    return os.path.join(BACKUP_DIR, f"{guild_id}.json")
-
-
-def _ser_overwrites(channel):
-    out = []
-    for target, ow in channel.overwrites.items():
-        allow, deny = ow.pair()
-        out.append({
-            "type": "role" if isinstance(target, discord.Role) else "member",
-            "id": target.id,
-            "allow": allow.value,
-            "deny": deny.value,
-        })
-    return out
-
-
-async def _ser_messages(channel):
-    msgs = []
-    try:
-        async for m in channel.history(limit=MESSAGES_PER_CHANNEL, oldest_first=False):
-            if not m.content and not m.attachments and not m.embeds:
-                continue
-            msgs.append({
-                "author": m.author.display_name,
-                "avatar": m.author.display_avatar.url,
-                "content": m.content or "",
-                "time": m.created_at.strftime("%Y-%m-%d %H:%M"),
-                "attachments": [a.url for a in m.attachments],
-                "embeds": [e.to_dict() for e in m.embeds][:10],
-            })
-    except Exception:
-        pass
-    msgs.reverse()  # کۆنترین یەکەم
-    return msgs
-
-
-async def _backup_guild(guild):
-    data = {"guild_id": guild.id, "channels": []}
-    for ch in guild.channels:
-        if isinstance(ch, discord.Thread):
-            continue
-        item = {
-            "id": ch.id,
-            "name": ch.name,
-            "kind": None,
-            "category_id": ch.category_id,
-            "position": ch.position,
-            "overwrites": _ser_overwrites(ch),
-            "messages": [],
-        }
-        if isinstance(ch, discord.CategoryChannel):
-            item["kind"] = "category"
-        elif isinstance(ch, discord.TextChannel):
-            item["kind"] = "news" if ch.is_news() else "text"
-            item["topic"] = ch.topic
-            item["nsfw"] = ch.nsfw
-            item["slowmode"] = ch.slowmode_delay
-            item["messages"] = await _ser_messages(ch)
-        elif isinstance(ch, discord.VoiceChannel):
-            item["kind"] = "voice"
-            item["bitrate"] = ch.bitrate
-            item["user_limit"] = ch.user_limit
-        elif isinstance(ch, discord.StageChannel):
-            item["kind"] = "stage"
-        elif isinstance(ch, discord.ForumChannel):
-            item["kind"] = "forum"
-            item["topic"] = ch.topic
-            item["nsfw"] = ch.nsfw
-            item["slowmode"] = ch.slowmode_delay
-        else:
-            continue
-        data["channels"].append(item)
-
-    with open(_backup_path(guild.id), "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
-    return data
-
-
-async def do_wipe(message):
-    guild = message.guild
-    admin = message.author
-
-    async with _wlock(guild.id):
-        try:
-            await message.delete()
-        except Exception:
-            pass
-
-        # 1) سەرەتا باکئەپ — ئەگەر شکستی هێنا هیچ ناسڕێتەوە
-        try:
-            await _backup_guild(guild)
-        except Exception as e:
-            try:
-                await admin.send(f"❌ باکئەپ سەرکەوتوو نەبوو، هیچ نەسڕایەوە: {e}")
-            except Exception:
-                pass
-            return
-
-        WIPING.add(guild.id)
-        try:
-            # 2) سڕینەوەی چەناڵەکان (چەناڵ سەرەتا، پاشان کاتێگۆری)
-            channels = [c for c in guild.channels if not isinstance(c, discord.Thread)]
-            channels.sort(key=lambda c: isinstance(c, discord.CategoryChannel))
-            for ch in channels:
-                try:
-                    await ch.delete(reason=f"Wipe by {admin}")
-                    await asyncio.sleep(0.4)
-                except Exception:
-                    pass  # بۆ نموونە چەناڵی Rules لە Community ناسڕدرێتەوە
-
-            # 3) یەک چەناڵ دروست دەکات بۆ ئەوەی reavludemirr بنووسیت
-            try:
-                ch = await guild.create_text_channel(
-                    RESTORE_CHANNEL_NAME,
-                    overwrites={
-                        guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-                    },
-                )
-                await ch.send(f"{admin.mention} بۆ گەڕاندنەوە بنووسە: `{TRIGGER_RESTORE}`")
-            except Exception:
-                pass
-            try:
-                await admin.send(
-                    f"✅ سێرڤەر پاک کرایەوە. بۆ گەڕاندنەوە لە #{RESTORE_CHANNEL_NAME} بنووسە `{TRIGGER_RESTORE}`"
-                )
-            except Exception:
-                pass
-            await asyncio.sleep(3)
-        finally:
-            WIPING.discard(guild.id)
-
-
-def _build_overwrites(guild, raw):
-    result = {}
-    for o in raw:
-        target = guild.get_role(o["id"]) if o["type"] == "role" else guild.get_member(o["id"])
-        if target is None:
-            continue
-        result[target] = discord.PermissionOverwrite.from_pair(
-            discord.Permissions(o["allow"]), discord.Permissions(o["deny"])
-        )
-    return result
-
-
-async def do_restore(message):
-    guild = message.guild
-    path = _backup_path(guild.id)
-
-    async with _wlock(guild.id):
-        if not os.path.exists(path):
-            try:
-                await message.channel.send("❌ هیچ باکئەپێک نەدۆزرایەوە.", delete_after=10)
-            except Exception:
-                pass
-            return
-
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        status_channel = message.channel
-        try:
-            await status_channel.send("⏳ گەڕاندنەوە دەستی پێکرد... (چاتە کۆنەکان کاتیان دەوێت)")
-        except Exception:
-            pass
-
-        WIPING.add(guild.id)
-        try:
-            items = data["channels"]
-            mapping = {}  # old_id -> new channel
-
-            # 1) کاتێگۆریەکان
-            for it in sorted([i for i in items if i["kind"] == "category"], key=lambda i: i["position"]):
-                try:
-                    new = await guild.create_category(
-                        it["name"], overwrites=_build_overwrites(guild, it["overwrites"])
-                    )
-                    mapping[it["id"]] = new
-                    await asyncio.sleep(0.4)
-                except Exception:
-                    pass
-
-            # 2) چەناڵەکان
-            others = sorted([i for i in items if i["kind"] != "category"], key=lambda i: i["position"])
-            for it in others:
-                cat = mapping.get(it["category_id"])
-                ow = _build_overwrites(guild, it["overwrites"])
-                try:
-                    k = it["kind"]
-                    if k in ("text", "news"):
-                        try:
-                            new = await guild.create_text_channel(
-                                it["name"], category=cat, topic=it.get("topic"),
-                                nsfw=it.get("nsfw", False), slowmode_delay=it.get("slowmode", 0),
-                                overwrites=ow, news=(k == "news"),
-                            )
-                        except Exception:
-                            new = await guild.create_text_channel(
-                                it["name"], category=cat, topic=it.get("topic"),
-                                nsfw=it.get("nsfw", False), slowmode_delay=it.get("slowmode", 0),
-                                overwrites=ow,
-                            )
-                    elif k == "voice":
-                        new = await guild.create_voice_channel(
-                            it["name"], category=cat,
-                            bitrate=min(it.get("bitrate", 64000), guild.bitrate_limit),
-                            user_limit=it.get("user_limit", 0), overwrites=ow,
-                        )
-                    elif k == "stage":
-                        new = await guild.create_stage_channel(it["name"], category=cat, overwrites=ow)
-                    elif k == "forum":
-                        new = await guild.create_forum(
-                            it["name"], category=cat, topic=it.get("topic"),
-                            nsfw=it.get("nsfw", False), slowmode_delay=it.get("slowmode", 0),
-                            overwrites=ow,
-                        )
-                    else:
-                        continue
-                    mapping[it["id"]] = new
-                    await asyncio.sleep(0.4)
-                except Exception:
-                    pass
-
-            # 3) نوێکردنەوەی چەناڵەکانی لۆگ/بەخێرهاتن لە guild_config
-            try:
-                c = config.get(str(guild.id))
-                if c:
-                    for key, old_id in list(c.get("channels", {}).items()):
-                        if old_id in mapping:
-                            c["channels"][key] = mapping[old_id].id
-                    save_config()
-            except Exception:
-                pass
-
-            # 4) گەڕاندنەوەی نامە کۆنەکان بە webhook
-            for it in others:
-                new = mapping.get(it["id"])
-                if not new or not it.get("messages") or not isinstance(new, discord.TextChannel):
-                    continue
-                try:
-                    hook = await new.create_webhook(name="restore")
-                except Exception:
-                    continue
-                for m in it["messages"]:
-                    text = f"`[{m['time']}]` {m['content']}"
-                    if m["attachments"]:
-                        text += "\n" + "\n".join(m["attachments"])
-                    embeds = []
-                    for e in m.get("embeds", []):
-                        try:
-                            embeds.append(discord.Embed.from_dict(e))
-                        except Exception:
-                            pass
-                    try:
-                        await hook.send(
-                            content=text[:2000],
-                            username=(m["author"] or "Unknown")[:80],
-                            avatar_url=m["avatar"],
-                            embeds=embeds,
-                            allowed_mentions=discord.AllowedMentions.none(),
-                        )
-                    except Exception:
-                        pass
-                    await asyncio.sleep(0.7)
-                try:
-                    await hook.delete()
-                except Exception:
-                    pass
-
-            # 5) سڕینەوەی چەناڵی restore-here و گۆڕینی ناوی باکئەپ
-            try:
-                if status_channel.name == RESTORE_CHANNEL_NAME:
-                    await status_channel.delete()
-            except Exception:
-                pass
-            try:
-                os.replace(path, path + ".restored")
-            except Exception:
-                pass
-            try:
-                await message.author.send("✅ سێرڤەر گەڕێندرایەوە.")
-            except Exception:
-                pass
-            await asyncio.sleep(3)
-        finally:
-            WIPING.discard(guild.id)
-
-
-# =========================================================
 # 11. CHANNEL CREATE / DELETE / UPDATE LOG
 # =========================================================
 
 @bot.event
 async def on_guild_channel_create(channel):
-    if channel.guild.id in WIPING:
-        return
     try:
         mute_role = discord.utils.get(channel.guild.roles, name="Muted")
         if mute_role:
@@ -645,9 +335,6 @@ async def on_guild_channel_create(channel):
 
 @bot.event
 async def on_guild_channel_delete(channel):
-    if channel.guild.id in WIPING:
-        return
-
     entry = await get_audit_executor(channel.guild, discord.AuditLogAction.channel_delete, channel.id)
 
     embed = make_embed(
@@ -663,9 +350,6 @@ async def on_guild_channel_delete(channel):
 
 @bot.event
 async def on_guild_channel_update(before, after):
-    if after.guild.id in WIPING:
-        return
-
     if before.category != after.category:
         try:
             mute_role = discord.utils.get(after.guild.roles, name="Muted")
@@ -860,8 +544,6 @@ async def on_guild_update(before, after):
 async def on_message_delete(message):
     if message.author.bot or message.guild is None:
         return
-    if message.guild.id in WIPING:
-        return
 
     content = message.content[:1500] if message.content else "*No text content*"
 
@@ -904,25 +586,12 @@ async def on_message(message):
     if message.author.bot or message.guild is None:
         return
 
-    is_admin = message.author.guild_permissions.administrator
-
-    # ---------------- WIPE / RESTORE (تەنها ئەدمین) ----------------
-    trigger_text = message.content.strip().lower()
-    if trigger_text == TRIGGER_WIPE:
-        if is_admin:
-            await do_wipe(message)
-        return
-    if trigger_text == TRIGGER_RESTORE:
-        if is_admin:
-            await do_restore(message)
-        return
-
     mute_role = discord.utils.get(message.guild.roles, name="Muted")
 
     if (
         mute_role
         and mute_role in message.author.roles
-        and not is_admin
+        and not message.author.guild_permissions.administrator
     ):
         try:
             await message.delete()
@@ -945,6 +614,8 @@ async def on_message(message):
 
     if not command and parts:
         command = parts[0].lower()
+
+    is_admin = message.author.guild_permissions.administrator
 
     # ---------------- SAFIKA ----------------
     if command == "safika":
@@ -1404,4 +1075,4 @@ async def regri(interaction: discord.Interaction, member: discord.Member, action
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 if TOKEN:
-    bot.run(TOKEN)
+    bot.run(TOKEN) 
