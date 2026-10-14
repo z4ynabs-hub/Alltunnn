@@ -621,13 +621,30 @@ async def on_message(message):
     if command == "safika":
         if not is_admin:
             return
-        if len(parts) >= 2 and parts[1].isdigit():
-            amount = min(int(parts[1]), 1000)
-            try:
-                deleted = await message.channel.purge(limit=amount + 1)
-                await message.channel.send(f"✅ `{len(deleted)}` نامە سڕایەوە.", delete_after=3)
-            except Exception:
-                pass
+
+        amount = None
+        for p in parts:
+            if p.isdigit():
+                amount = min(int(p), 1000)
+                break
+
+        if amount is None:
+            await message.channel.send("❌ وەک: `safika 10`", delete_after=5)
+            return
+
+        try:
+            deleted = await message.channel.purge(limit=amount + 1)
+            await message.channel.send(
+                f"✅ `{max(len(deleted) - 1, 0)}` نامە سڕایەوە.", delete_after=3
+            )
+        except discord.Forbidden:
+            await message.channel.send(
+                "❌ بۆتەکە مۆڵەتی Manage Messages / Read Message History ی نییە.",
+                delete_after=8
+            )
+        except Exception as e:
+            print(f"safika error: {e}")
+            await message.channel.send(f"❌ هەڵە: {e}", delete_after=8)
         return
 
     # ---------------- MUTE ----------------
@@ -1075,4 +1092,4 @@ async def regri(interaction: discord.Interaction, member: discord.Member, action
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 if TOKEN:
-    bot.run(TOKEN) 
+    bot.run(TOKEN)
