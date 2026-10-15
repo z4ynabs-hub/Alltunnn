@@ -20,8 +20,17 @@ bot = commands.Bot(command_prefix="", intents=intents, case_insensitive=True)
 # =========================================================
 # 2. PER-SERVER CONFIG (saved in guild_config.json)
 # =========================================================
+# بۆ ئەوەی ڕێکخستنەکان لە Railway دوای ئەپدەیت/ڕیدیپلۆی نەسڕێنەوە:
+#   1) لە Railway Volume دروست بکە و Mount Path بکە بە  /data
+#   2) ئەگەر /data هەبێت بۆتەکە خۆکار لەوێ هەڵیدەگرێت
+#   (یان Variable بەناوی CONFIG_PATH دابنێ)
 
-CONFIG_FILE = "guild_config.json"
+if os.getenv("CONFIG_PATH"):
+    CONFIG_FILE = os.getenv("CONFIG_PATH")
+elif os.path.isdir("/data"):
+    CONFIG_FILE = "/data/guild_config.json"
+else:
+    CONFIG_FILE = "guild_config.json"
 
 LOG_TYPES = {
     "welcome": "Welcome",
@@ -36,6 +45,12 @@ LOG_TYPES = {
     "nickname": "Nickname Log",
 }
 
+PERM_LABELS = {
+    "mute": "Mute",
+    "ban": "Ban (Bfra / Unban)",
+    "safika": "Safika (Clear)",
+}
+
 try:
     with open(CONFIG_FILE, "r", encoding="utf-8") as f:
         config = json.load(f)
@@ -45,10 +60,12 @@ except Exception:
 
 def save_config():
     try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        tmp = CONFIG_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+        os.replace(tmp, CONFIG_FILE)
+    except Exception as e:
+        print(f"save_config error: {e}")
 
 
 def cfg(guild_id):
@@ -58,7 +75,49 @@ def cfg(guild_id):
     d.setdefault("regri_roles", [])    # roles allowed to use /regri
     d.setdefault("restricted", [])     # users blocked from color change
     d.setdefault("welcome_text", "Baxer beyt")
+    d.setdefault("dev_roles", [])      # developer roles (full control like owner)
+    perm = d.setdefault("perm_roles", {})  # roles allowed: mute / ban / safika
+    for k in PERM_LABELS:
+        perm.setdefault(k, [])
     return d
+
+
+def has_cmd_access(member, key):
+    """Owner + Administrator + roles chosen with /rolemute /roleban /rolesafika"""
+    try:
+        if member.id == member.guild.owner_id:
+            return True
+        if member.guild_permissions.administrator:
+            return True
+        allowed = cfg(member.guild.id)["perm_roles"].get(key, [])
+        return any(r.id in allowed for r in member.roles)
+    except Exception:
+        return False
+
+
+def is_dev(member):
+    """Owner + roles chosen with /setdev (NOT every administrator)"""
+    try:
+        if member.id == member.guild.owner_id:
+            return True
+        dev = cfg(member.guild.id)["dev_roles"]
+        return any(r.id in dev for r in member.roles)
+    except Exception:
+        return False
+
+
+def hierarchy_error(author, target):
+    """Returns an error text if author may not act on target, else None."""
+    guild = author.guild
+    if target.id == author.id:
+        return "❌ ناتوانیت ئەمە لەسەر خۆت بکەیت."
+    if target.id == guild.owner_id:
+        return "❌ ناتوانیت ئەمە لەسەر خاوەنی سێرڤەر بکەیت."
+    if author.id == guild.owner_id or author.guild_permissions.administrator:
+        return None
+    if target.top_role >= author.top_role:
+        return "❌ ناتوانیت ئەمە لەسەر کەسێک بکەیت کە ڕۆڵەکەی بەرزترە یان یەکسانە لەگەڵ ڕۆڵی تۆ."
+    return None
 
 
 # =========================================================
@@ -143,6 +202,7 @@ async def on_ready():
             pass
 
     print(f"بۆتەکە بە سەرکەوتوویی چالاک بوو وەک: {bot.user}")
+    print(f"Config file: {CONFIG_FILE}")
 
 
 # =========================================================
@@ -261,7 +321,9 @@ async def get_target_member(message):
 
     if message.reference:
         try:
-            ref = await message.channel.fetch_message(message.reference.message_id)
+            ref = message.reference.resolved
+            if not isinstance(ref, discord.Message):
+                ref = await message.channel.fetch_message(message.reference.message_id)
             if ref.author.id == bot.user.id:
                 return None
             if isinstance(ref.author, discord.Member):
@@ -454,6 +516,56 @@ async def on_guild_role_update(before, after):
 
 @bot.event
 async def on_voice_state_update(member, before, after):
+    guild = member.guild
+
+    # ---- Server Mute / Server Deafen (کەسێکی تر میوت یان دیفێنی کرد) ----
+    if before.mute != after.mute or before.deaf != after.deaf:
+        entry = await get_audit_executor(guild, discord.AuditLogAction.member_update, member.id)
+        by = who(entry)
+        ch = after.channel or before.channel
+        ch_text = ch.mention if ch else "`—`"
+
+        if before.mute != after.mute:
+            if after.mute:
+                embed = make_embed(
+                    "🔇 Voice Muted",
+                    f"**Member:** {member.mention}\n"
+                    f"**Muted By:** {by}\n"
+                    f"**Channel:** {ch_text}",
+                    discord.Color.red()
+                )
+            else:
+                embed = make_embed(
+                    "🔈 Voice Unmuted",
+                    f"**Member:** {member.mention}\n"
+                    f"**Unmuted By:** {by}\n"
+                    f"**Channel:** {ch_text}",
+                    discord.Color.green()
+                )
+            add_user_thumbnail(embed, member)
+            await send_log(guild, "voice", embed)
+
+        if before.deaf != after.deaf:
+            if after.deaf:
+                embed = make_embed(
+                    "🙉 Voice Deafened",
+                    f"**Member:** {member.mention}\n"
+                    f"**Deafened By:** {by}\n"
+                    f"**Channel:** {ch_text}",
+                    discord.Color.red()
+                )
+            else:
+                embed = make_embed(
+                    "👂 Voice Undeafened",
+                    f"**Member:** {member.mention}\n"
+                    f"**Undeafened By:** {by}\n"
+                    f"**Channel:** {ch_text}",
+                    discord.Color.green()
+                )
+            add_user_thumbnail(embed, member)
+            await send_log(guild, "voice", embed)
+
+    # ---- Join / Leave / Move ----
     if before.channel is None and after.channel is not None:
         embed = make_embed(
             "🔊 Voice Join",
@@ -482,7 +594,7 @@ async def on_voice_state_update(member, before, after):
         return
 
     add_user_thumbnail(embed, member)
-    await send_log(member.guild, "voice", embed)
+    await send_log(guild, "voice", embed)
 
 
 # =========================================================
@@ -581,6 +693,21 @@ async def on_message_edit(before, after):
 # 24. MAIN COMMAND SYSTEM (no prefix)
 # =========================================================
 
+COMMAND_WORDS = ["safika", "mute", "unmute", "bfra", "unban", "lock", "unlock"]
+
+
+def parse_safika_amount(parts):
+    """Safika 1 / safika10 / safika ٥ / هەر شێوازێک"""
+    for p in parts:
+        pl = p.lower().strip()
+        if pl.startswith("safika") and pl[6:].isdigit():
+            return int(pl[6:])
+    for p in parts:
+        if p.strip().isdigit():
+            return int(p.strip())
+    return None
+
+
 @bot.event
 async def on_message(message):
     if message.author.bot or message.guild is None:
@@ -608,29 +735,28 @@ async def on_message(message):
 
     for part in parts:
         clean_part = part.lower().strip()
-        if clean_part in ["safika", "mute", "unmute", "bfra", "unban", "lock", "unlock"]:
+        if clean_part in COMMAND_WORDS:
             command = clean_part
+            break
+        if clean_part.startswith("safika") and clean_part[6:].isdigit():
+            command = "safika"
             break
 
     if not command and parts:
         command = parts[0].lower()
 
-    is_admin = message.author.guild_permissions.administrator
-
     # ---------------- SAFIKA ----------------
     if command == "safika":
-        if not is_admin:
+        if not has_cmd_access(message.author, "safika"):
             return
 
-        amount = None
-        for p in parts:
-            if p.isdigit():
-                amount = min(int(p), 1000)
-                break
+        amount = parse_safika_amount(parts)
 
-        if amount is None:
+        if amount is None or amount < 1:
             await message.channel.send("❌ وەک: `safika 10`", delete_after=5)
             return
+
+        amount = min(amount, 1000)
 
         try:
             deleted = await message.channel.purge(limit=amount + 1)
@@ -649,77 +775,138 @@ async def on_message(message):
 
     # ---------------- MUTE ----------------
     if command == "mute":
-        if not is_admin:
+        if not has_cmd_access(message.author, "mute"):
             return
+
         target = await get_target_member(message)
-        if target:
+        if not target:
+            await message.channel.send(
+                "❌ کەسەکە تاگ بکە یان ڕیپلەی بکە: `mute @user`", delete_after=5
+            )
+            return
+
+        err = hierarchy_error(message.author, target)
+        if err:
+            await message.channel.send(err, delete_after=5)
+            return
+
+        try:
+            muted_role = await get_or_create_muted_role(message.guild)
+            if muted_role not in target.roles:
+                await target.add_roles(muted_role, reason=f"Muted by {message.author}")
             try:
-                mute_role = await get_or_create_muted_role(message.guild)
-                if mute_role not in target.roles:
-                    await target.add_roles(mute_role, reason=f"Muted by {message.author}")
-                try:
-                    await message.delete()
-                except Exception:
-                    pass
-                await message.channel.send(f"damt daxaa {target.mention}", delete_after=2)
+                await message.delete()
             except Exception:
                 pass
+            await message.channel.send(f"damt daxaa {target.mention}", delete_after=2)
+        except discord.Forbidden:
+            await message.channel.send(
+                "❌ بۆتەکە مۆڵەتی Manage Roles ی نییە، یان ڕۆڵی بۆتەکە لە **Roles** دا لە خوار ڕۆڵی Muted یان ئەو کەسەیە. ڕۆڵی بۆتەکە بەرز بکەرەوە.",
+                delete_after=10
+            )
+        except Exception as e:
+            print(f"mute error: {e}")
+            await message.channel.send(f"❌ هەڵە: {e}", delete_after=8)
         return
 
     # ---------------- UNMUTE ----------------
     if command == "unmute":
-        if not is_admin:
+        if not has_cmd_access(message.author, "mute"):
             return
+
         target = await get_target_member(message)
-        if target:
+        if not target:
+            await message.channel.send(
+                "❌ کەسەکە تاگ بکە یان ڕیپلەی بکە: `unmute @user`", delete_after=5
+            )
+            return
+
+        try:
+            muted_role = discord.utils.get(message.guild.roles, name="Muted")
+            if muted_role and muted_role in target.roles:
+                await target.remove_roles(muted_role)
             try:
-                mute_role = discord.utils.get(message.guild.roles, name="Muted")
-                if mute_role and mute_role in target.roles:
-                    await target.remove_roles(mute_role)
-                try:
-                    await message.delete()
-                except Exception:
-                    pass
-                await message.channel.send(
-                    f"xwa xerm bnwse dllm basha aqllba amjara {target.mention}",
-                    delete_after=2
-                )
+                await message.delete()
             except Exception:
                 pass
+            await message.channel.send(
+                f"xwa xerm bnwse dllm basha aqllba amjara {target.mention}",
+                delete_after=2
+            )
+        except discord.Forbidden:
+            await message.channel.send(
+                "❌ بۆتەکە مۆڵەتی Manage Roles ی نییە، یان ڕۆڵەکەی لە خوار ڕۆڵی Muted ە.",
+                delete_after=10
+            )
+        except Exception as e:
+            print(f"unmute error: {e}")
+            await message.channel.send(f"❌ هەڵە: {e}", delete_after=8)
         return
 
     # ---------------- BFRA ----------------
     if command == "bfra":
-        if not is_admin:
+        if not has_cmd_access(message.author, "ban"):
             return
+
         target = await get_target_member(message)
-        if target:
+        if not target:
+            await message.channel.send(
+                "❌ کەسەکە تاگ بکە یان ڕیپلەی بکە: `bfra @user`", delete_after=5
+            )
+            return
+
+        err = hierarchy_error(message.author, target)
+        if err:
+            await message.channel.send(err, delete_after=5)
+            return
+
+        try:
+            await target.ban(reason=f"Banned by {message.author}")
             try:
-                await target.ban()
-                try:
-                    await message.delete()
-                except Exception:
-                    pass
-                await message.channel.send(f"Frenraa✈️ {target.mention}", delete_after=2)
+                await message.delete()
             except Exception:
                 pass
+            await message.channel.send(f"Frenraa✈️ {target.mention}", delete_after=2)
+        except discord.Forbidden:
+            await message.channel.send(
+                "❌ بۆتەکە مۆڵەتی Ban Members ی نییە، یان ڕۆڵی بۆتەکە لە خوار ڕۆڵی ئەو کەسەیە. ڕۆڵی بۆتەکە بەرز بکەرەوە.",
+                delete_after=10
+            )
+        except Exception as e:
+            print(f"bfra error: {e}")
+            await message.channel.send(f"❌ هەڵە: {e}", delete_after=8)
         return
 
     # ---------------- UNBAN ----------------
     if command == "unban":
-        if not is_admin:
+        if not has_cmd_access(message.author, "ban"):
             return
-        if len(parts) >= 2 and parts[1].isdigit():
+
+        user_id = None
+        for p in parts:
+            if p.strip().isdigit() and len(p.strip()) >= 15:
+                user_id = int(p.strip())
+                break
+
+        if user_id is None:
+            await message.channel.send("❌ وەک: `unban 123456789012345678`", delete_after=5)
+            return
+
+        try:
+            user = await bot.fetch_user(user_id)
+            await message.guild.unban(user)
             try:
-                user = await bot.fetch_user(int(parts[1]))
-                await message.guild.unban(user)
-                try:
-                    await message.delete()
-                except Exception:
-                    pass
-                await message.channel.send("✅ Unban کرا.", delete_after=3)
+                await message.delete()
             except Exception:
                 pass
+            await message.channel.send("✅ Unban کرا.", delete_after=3)
+        except discord.NotFound:
+            await message.channel.send("❌ ئەم کەسە لە لیستی Ban دا نییە.", delete_after=5)
+        except discord.Forbidden:
+            await message.channel.send("❌ بۆتەکە مۆڵەتی Ban Members ی نییە.", delete_after=8)
+        except Exception as e:
+            print(f"unban error: {e}")
+            await message.channel.send(f"❌ هەڵە: {e}", delete_after=8)
         return
 
     # ---------------- LOCK ----------------
@@ -769,8 +956,8 @@ async def welcome_cmd(
     channel: discord.TextChannel,
     text: str = None
 ):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ تەنها ئەدیمین.", ephemeral=True)
+    if not is_dev(interaction.user):
+        await interaction.response.send_message("❌ تەنها خاوەنی سێرڤەر و ڕۆڵی دیڤیلۆپەر.", ephemeral=True)
         return
 
     c = cfg(interaction.guild.id)
@@ -796,8 +983,8 @@ async def setlog(
     type: str,
     channel: discord.TextChannel
 ):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ تەنها ئەدیمین.", ephemeral=True)
+    if not is_dev(interaction.user):
+        await interaction.response.send_message("❌ تەنها خاوەنی سێرڤەر و ڕۆڵی دیڤیلۆپەر.", ephemeral=True)
         return
 
     cfg(interaction.guild.id)["channels"][type] = channel.id
@@ -813,8 +1000,8 @@ async def setlog(
 @app_commands.default_permissions(administrator=True)
 @app_commands.describe(channel="کەناڵی هەموو لۆگەکان")
 async def setlogall(interaction: discord.Interaction, channel: discord.TextChannel):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ تەنها ئەدیمین.", ephemeral=True)
+    if not is_dev(interaction.user):
+        await interaction.response.send_message("❌ تەنها خاوەنی سێرڤەر و ڕۆڵی دیڤیلۆپەر.", ephemeral=True)
         return
 
     c = cfg(interaction.guild.id)
@@ -839,8 +1026,8 @@ async def setlogall(interaction: discord.Interaction, channel: discord.TextChann
     ]
 )
 async def setstaff(interaction: discord.Interaction, slot: str, role: discord.Role):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ تەنها ئەدیمین.", ephemeral=True)
+    if not is_dev(interaction.user):
+        await interaction.response.send_message("❌ تەنها خاوەنی سێرڤەر و ڕۆڵی دیڤیلۆپەر.", ephemeral=True)
         return
 
     cfg(interaction.guild.id)["roles"][slot] = role.id
@@ -862,8 +1049,8 @@ async def setstaff(interaction: discord.Interaction, slot: str, role: discord.Ro
     ]
 )
 async def regri_roles(interaction: discord.Interaction, action: str, role: discord.Role):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ تەنها ئەدیمین.", ephemeral=True)
+    if not is_dev(interaction.user):
+        await interaction.response.send_message("❌ تەنها خاوەنی سێرڤەر و ڕۆڵی دیڤیلۆپەر.", ephemeral=True)
         return
 
     c = cfg(interaction.guild.id)
@@ -881,12 +1068,105 @@ async def regri_roles(interaction: discord.Interaction, action: str, role: disco
     await interaction.response.send_message(msg, ephemeral=True)
 
 
+# ---------------------------------------------------------
+# /rolemute  /roleban  /rolesafika
+# ---------------------------------------------------------
+
+async def update_perm_role(interaction, key, action, role):
+    user = interaction.user
+    if not is_dev(user):
+        await interaction.response.send_message(
+            "❌ تەنها خاوەنی سێرڤەر و ڕۆڵی دیڤیلۆپەر.", ephemeral=True
+        )
+        return
+
+    c = cfg(interaction.guild.id)
+    lst = c["perm_roles"][key]
+
+    if action == "add":
+        if role.id not in lst:
+            lst.append(role.id)
+        msg = f"✅ {role.mention} ئێستا دەتوانێت **{PERM_LABELS[key]}** بەکاربهێنێت."
+    elif action == "remove":
+        if role.id in lst:
+            lst.remove(role.id)
+        msg = f"✅ {role.mention} لە **{PERM_LABELS[key]}** لابرا."
+    else:
+        msg = "❌ هەڵبژاردنێکی نادروستە."
+
+    save_config()
+    await interaction.response.send_message(
+        msg, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
+PERM_ACTION_CHOICES = [
+    app_commands.Choice(name="Add (زیادکردن)", value="add"),
+    app_commands.Choice(name="Remove (لابردن)", value="remove"),
+]
+
+
+@bot.tree.command(name="rolemute", description="دیاریکردنی ئەو ڕۆڵانەی دەتوانن Mute بکەن")
+@app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(action="زیادکردن یان لابردن", role="ڕۆڵەکە")
+@app_commands.choices(action=PERM_ACTION_CHOICES)
+async def rolemute(interaction: discord.Interaction, action: str, role: discord.Role):
+    await update_perm_role(interaction, "mute", action, role)
+
+
+@bot.tree.command(name="roleban", description="دیاریکردنی ئەو ڕۆڵانەی دەتوانن Bfra / Unban بکەن")
+@app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(action="زیادکردن یان لابردن", role="ڕۆڵەکە")
+@app_commands.choices(action=PERM_ACTION_CHOICES)
+async def roleban(interaction: discord.Interaction, action: str, role: discord.Role):
+    await update_perm_role(interaction, "ban", action, role)
+
+
+@bot.tree.command(name="rolesafika", description="دیاریکردنی ئەو ڕۆڵانەی دەتوانن Safika (کلێر) بکەن")
+@app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(action="زیادکردن یان لابردن", role="ڕۆڵەکە")
+@app_commands.choices(action=PERM_ACTION_CHOICES)
+async def rolesafika(interaction: discord.Interaction, action: str, role: discord.Role):
+    await update_perm_role(interaction, "safika", action, role)
+
+
+@bot.tree.command(name="setdev", description="دیاریکردنی ڕۆڵی دیڤیلۆپەر (تەنها خاوەنی سێرڤەر)")
+@app_commands.guild_only()
+@app_commands.describe(action="زیادکردن یان لابردن", role="ڕۆڵی دیڤیلۆپەر")
+@app_commands.choices(action=PERM_ACTION_CHOICES)
+async def setdev(interaction: discord.Interaction, action: str, role: discord.Role):
+    if interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message(
+            "❌ تەنها خاوەنی سێرڤەر دەتوانێت ڕۆڵی دیڤیلۆپەر دیاری بکات.", ephemeral=True
+        )
+        return
+
+    c = cfg(interaction.guild.id)
+
+    if action == "add":
+        if role.id not in c["dev_roles"]:
+            c["dev_roles"].append(role.id)
+        msg = f"✅ {role.mention} بوو بە ڕۆڵی دیڤیلۆپەر."
+    else:
+        if role.id in c["dev_roles"]:
+            c["dev_roles"].remove(role.id)
+        msg = f"✅ {role.mention} لە ڕۆڵی دیڤیلۆپەر لابرا."
+
+    save_config()
+    await interaction.response.send_message(
+        msg, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+    )
+
+
 @bot.tree.command(name="config", description="پیشاندانی ڕێکخستنەکانی ئەم سێرڤەرە")
 @app_commands.guild_only()
 @app_commands.default_permissions(administrator=True)
 async def config_cmd(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("❌ تەنها ئەدیمین.", ephemeral=True)
+    if not is_dev(interaction.user):
+        await interaction.response.send_message("❌ تەنها خاوەنی سێرڤەر و ڕۆڵی دیڤیلۆپەر.", ephemeral=True)
         return
 
     c = cfg(interaction.guild.id)
@@ -903,7 +1183,18 @@ async def config_cmd(interaction: discord.Interaction):
     regri = ", ".join(f"<@&{r}>" for r in c["regri_roles"]) or "❌"
     lines.append(f"**Regri roles:** {regri}")
 
-    await interaction.response.send_message("\n".join(lines), ephemeral=True)
+    dev = ", ".join(f"<@&{r}>" for r in c["dev_roles"]) or "❌ (تەنها Owner)"
+    lines.append(f"**Developer roles:** {dev}")
+
+    for k, label in PERM_LABELS.items():
+        roles_txt = ", ".join(f"<@&{r}>" for r in c["perm_roles"][k]) or "❌"
+        lines.append(f"**{label} roles:** {roles_txt}")
+
+    await interaction.response.send_message(
+        "\n".join(lines),
+        ephemeral=True,
+        allowed_mentions=discord.AllowedMentions.none()
+    )
 
 
 # =========================================================
@@ -923,9 +1214,9 @@ async def staff(
     member: discord.Member,
     role_choice: str
 ):
-    if not interaction.user.guild_permissions.administrator:
+    if not is_dev(interaction.user):
         await interaction.response.send_message(
-            "❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True
+            "❌ تەنها خاوەنی سێرڤەر و ڕۆڵی دیڤیلۆپەر دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True
         )
         return
 
@@ -965,9 +1256,9 @@ async def staff(
     color="کۆدی ڕەنگ بۆ نموونە #FF0000"
 )
 async def rangi_role(interaction: discord.Interaction, role: str, color: str):
-    if not interaction.user.guild_permissions.administrator:
+    if not is_dev(interaction.user):
         await interaction.response.send_message(
-            "❌ تەنها ئەدیمین دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True
+            "❌ تەنها خاوەنی سێرڤەر و ڕۆڵی دیڤیلۆپەر دەتوانێت ئەم کۆماندە بەکاربهێنێت.", ephemeral=True
         )
         return
 
