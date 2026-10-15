@@ -75,7 +75,9 @@ def cfg(guild_id):
     d.setdefault("regri_roles", [])    # roles allowed to use /regri
     d.setdefault("restricted", [])     # users blocked from color change
     d.setdefault("welcome_text", "Baxer beyt")
+    d.setdefault("welcome_image", None)  # image / gif link shown under the welcome text
     d.setdefault("dev_roles", [])      # developer roles (full control like owner)
+    d.setdefault("mute_role", None)    # role given on mute (set with /setmuterole)
     perm = d.setdefault("perm_roles", {})  # roles allowed: mute / ban / safika
     for k in PERM_LABELS:
         perm.setdefault(k, [])
@@ -104,6 +106,47 @@ def is_dev(member):
         return any(r.id in dev for r in member.roles)
     except Exception:
         return False
+
+
+def get_mute_role(guild):
+    """Role chosen with /setmuterole, otherwise a role named Muted"""
+    rid = cfg(guild.id).get("mute_role")
+    if rid:
+        role = guild.get_role(rid)
+        if role:
+            return role
+    return get_mute_role(guild)
+
+
+def is_mute_role(role):
+    try:
+        rid = cfg(role.guild.id).get("mute_role")
+        return role.name == "Muted" or (rid is not None and role.id == rid)
+    except Exception:
+        return role.name == "Muted"
+
+
+def block_reason(guild, target, perm, role=None):
+    """Explains exactly why Discord will refuse the action (or None if OK)."""
+    me = guild.me
+    if target.id == guild.owner_id:
+        return "❌ خاوەنی سێرڤەر Ban/Mute ناکرێت (Discord ڕێگە نادات)."
+    gp = me.guild_permissions
+    if not (gp.administrator or getattr(gp, perm, False)):
+        return f"❌ بۆتەکە مۆڵەتی `{perm}` ی نییە."
+    if target.top_role >= me.top_role:
+        return (
+            f"❌ ڕۆڵی بۆتەکە (**{me.top_role.name}**) لە خوار یان یەکسانە لەگەڵ بەرزترین ڕۆڵی "
+            f"**{target.display_name}** (**{target.top_role.name}**). "
+            f"Discord ئەدمینی بۆتیش ڕێگە نادات. لە Server Settings ← Roles "
+            f"ڕۆڵی **{me.top_role.name}** ڕابکێشە سەروو ڕۆڵی **{target.top_role.name}**."
+        )
+    if role is not None and role >= me.top_role:
+        return (
+            f"❌ ڕۆڵی Mute (**{role.name}**) لە سەروو یان یەکسانە لەگەڵ ڕۆڵی بۆتەکە (**{me.top_role.name}**). "
+            f"ڕۆڵی بۆتەکە بەرزتر بکەرەوە لە Roles."
+        )
+    return None
 
 
 def hierarchy_error(author, target):
@@ -195,7 +238,7 @@ async def on_ready():
 
     for guild in bot.guilds:
         try:
-            mute_role = discord.utils.get(guild.roles, name="Muted")
+            mute_role = get_mute_role(guild)
             if mute_role:
                 await sync_muted_permissions(guild, mute_role)
         except Exception:
@@ -223,6 +266,8 @@ async def on_member_join(member):
                 description=f"{member.mention}\n{text}"
             )
             embed.set_thumbnail(url=member.display_avatar.url)
+            if c.get("welcome_image"):
+                embed.set_image(url=c["welcome_image"])
             await channel.send(embed=embed)
         except Exception:
             pass
@@ -282,7 +327,7 @@ async def on_member_update(before, after):
     added_roles = set(after.roles) - set(before.roles)
     removed_roles = set(before.roles) - set(after.roles)
 
-    real_added = [r for r in added_roles if r.name not in ["@everyone", "Muted"]]
+    real_added = [r for r in added_roles if r.name != "@everyone" and not is_mute_role(r)]
     if real_added:
         entry = await get_audit_executor(guild, discord.AuditLogAction.member_role_update, after.id)
         roles_text = "\n".join(f"➕ {r.mention}" for r in real_added)
@@ -295,7 +340,7 @@ async def on_member_update(before, after):
         add_user_thumbnail(embed, after)
         await send_log(guild, "member", embed)
 
-    real_removed = [r for r in removed_roles if r.name not in ["@everyone", "Muted"]]
+    real_removed = [r for r in removed_roles if r.name != "@everyone" and not is_mute_role(r)]
     if real_removed:
         entry = await get_audit_executor(guild, discord.AuditLogAction.member_role_update, after.id)
         roles_text = "\n".join(f"➖ {r.mention}" for r in real_removed)
@@ -361,7 +406,7 @@ async def sync_muted_permissions(guild, mute_role):
 
 
 async def get_or_create_muted_role(guild):
-    mute_role = discord.utils.get(guild.roles, name="Muted")
+    mute_role = get_mute_role(guild)
     if not mute_role:
         mute_role = await guild.create_role(name="Muted", reason="Mute role")
     await sync_muted_permissions(guild, mute_role)
@@ -375,7 +420,7 @@ async def get_or_create_muted_role(guild):
 @bot.event
 async def on_guild_channel_create(channel):
     try:
-        mute_role = discord.utils.get(channel.guild.roles, name="Muted")
+        mute_role = get_mute_role(channel.guild)
         if mute_role:
             await apply_muted_permissions(channel, mute_role)
 
@@ -414,7 +459,7 @@ async def on_guild_channel_delete(channel):
 async def on_guild_channel_update(before, after):
     if before.category != after.category:
         try:
-            mute_role = discord.utils.get(after.guild.roles, name="Muted")
+            mute_role = get_mute_role(after.guild)
             if mute_role:
                 await apply_muted_permissions(after, mute_role)
         except Exception:
@@ -452,7 +497,7 @@ async def on_guild_channel_update(before, after):
 
 @bot.event
 async def on_guild_role_create(role):
-    if role.name == "Muted":
+    if is_mute_role(role):
         return
 
     entry = await get_audit_executor(role.guild, discord.AuditLogAction.role_create, role.id)
@@ -469,7 +514,7 @@ async def on_guild_role_create(role):
 
 @bot.event
 async def on_guild_role_delete(role):
-    if role.name == "Muted":
+    if is_mute_role(role):
         return
 
     entry = await get_audit_executor(role.guild, discord.AuditLogAction.role_delete, role.id)
@@ -485,7 +530,7 @@ async def on_guild_role_delete(role):
 
 @bot.event
 async def on_guild_role_update(before, after):
-    if after.name == "Muted":
+    if is_mute_role(after):
         return
 
     changes = []
@@ -713,7 +758,7 @@ async def on_message(message):
     if message.author.bot or message.guild is None:
         return
 
-    mute_role = discord.utils.get(message.guild.roles, name="Muted")
+    mute_role = get_mute_role(message.guild)
 
     if (
         mute_role
@@ -792,6 +837,10 @@ async def on_message(message):
 
         try:
             muted_role = await get_or_create_muted_role(message.guild)
+            reason = block_reason(message.guild, target, "manage_roles", muted_role)
+            if reason:
+                await message.channel.send(reason, delete_after=15)
+                return
             if muted_role not in target.roles:
                 await target.add_roles(muted_role, reason=f"Muted by {message.author}")
             try:
@@ -822,7 +871,7 @@ async def on_message(message):
             return
 
         try:
-            muted_role = discord.utils.get(message.guild.roles, name="Muted")
+            muted_role = get_mute_role(message.guild)
             if muted_role and muted_role in target.roles:
                 await target.remove_roles(muted_role)
             try:
@@ -861,6 +910,10 @@ async def on_message(message):
             return
 
         try:
+            reason = block_reason(message.guild, target, "ban_members")
+            if reason:
+                await message.channel.send(reason, delete_after=15)
+                return
             await target.ban(reason=f"Banned by {message.author}")
             try:
                 await message.delete()
@@ -949,12 +1002,14 @@ async def on_message(message):
 @app_commands.default_permissions(administrator=True)
 @app_commands.describe(
     channel="کەناڵی بەخێرهاتن",
-    text="دەقی بەخێرهاتن (دەتوانیت {server} بەکاربهێنیت)"
+    text="دەقی بەخێرهاتن (دەتوانیت {server} بەکاربهێنیت)",
+    image="لینکی ڕەسم یان گیف (بۆ لابردن بنووسە: off)"
 )
 async def welcome_cmd(
     interaction: discord.Interaction,
     channel: discord.TextChannel,
-    text: str = None
+    text: str = None,
+    image: str = None
 ):
     if not is_dev(interaction.user):
         await interaction.response.send_message("❌ تەنها خاوەنی سێرڤەر و ڕۆڵی دیڤیلۆپەر.", ephemeral=True)
@@ -962,12 +1017,28 @@ async def welcome_cmd(
 
     c = cfg(interaction.guild.id)
     c["channels"]["welcome"] = channel.id
+    image_note = ""
+    if image:
+        img = image.strip()
+        if img.lower() in ("off", "remove", "delete", "no", "none"):
+            c["welcome_image"] = None
+            image_note = "\n🖼 ڕەسم/گیف لابرا."
+        elif img.lower().startswith(("http://", "https://")):
+            c["welcome_image"] = img
+            image_note = "\n🖼 ڕەسم/گیف دیاری کرا."
+        else:
+            await interaction.response.send_message(
+                "❌ لینکی ڕەسم/گیف دەبێت بە `https://` دەست پێبکات.", ephemeral=True
+            )
+            return
+
+    c["channels"]["welcome"] = channel.id
     if text:
         c["welcome_text"] = text
     save_config()
 
     await interaction.response.send_message(
-        f"✅ کەناڵی بەخێرهاتن: {channel.mention}", ephemeral=True
+        f"✅ کەناڵی بەخێرهاتن: {channel.mention}{image_note}", ephemeral=True
     )
 
 
@@ -1133,6 +1204,40 @@ async def rolesafika(interaction: discord.Interaction, action: str, role: discor
     await update_perm_role(interaction, "safika", action, role)
 
 
+@bot.tree.command(name="setmuterole", description="دیاریکردنی ئەو ڕۆڵەی لە کاتی Mute دەدرێت بە کەسەکە")
+@app_commands.guild_only()
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(role="ڕۆڵی Mute (بۆ نموونە Muted)")
+async def setmuterole(interaction: discord.Interaction, role: discord.Role):
+    if not is_dev(interaction.user):
+        await interaction.response.send_message(
+            "❌ تەنها خاوەنی سێرڤەر و ڕۆڵی دیڤیلۆپەر.", ephemeral=True
+        )
+        return
+
+    if role.is_default() or role.managed:
+        await interaction.response.send_message(
+            "❌ ئەم ڕۆڵە ناکرێت وەک ڕۆڵی Mute بەکاربێت.", ephemeral=True
+        )
+        return
+
+    cfg(interaction.guild.id)["mute_role"] = role.id
+    save_config()
+
+    await interaction.response.defer(ephemeral=True)
+    await sync_muted_permissions(interaction.guild, role)
+
+    me = interaction.guild.me
+    warn = ""
+    if role >= me.top_role:
+        warn = f"\n⚠ ڕۆڵی بۆتەکە (**{me.top_role.name}**) دەبێت لە سەروو ئەم ڕۆڵەوە بێت لە Roles."
+
+    await interaction.followup.send(
+        f"✅ ڕۆڵی Mute: **{role.name}** (ڕێگەپێدراوییەکانی هەموو کەناڵەکان ڕێکخرا).{warn}",
+        ephemeral=True
+    )
+
+
 @bot.tree.command(name="setdev", description="دیاریکردنی ڕۆڵی دیڤیلۆپەر (تەنها خاوەنی سێرڤەر)")
 @app_commands.guild_only()
 @app_commands.describe(action="زیادکردن یان لابردن", role="ڕۆڵی دیڤیلۆپەر")
@@ -1185,6 +1290,9 @@ async def config_cmd(interaction: discord.Interaction):
 
     dev = ", ".join(f"<@&{r}>" for r in c["dev_roles"]) or "❌ (تەنها Owner)"
     lines.append(f"**Developer roles:** {dev}")
+
+    mrid = c.get("mute_role")
+    lines.append(f"**Mute role:** {f'<@&{mrid}>' if mrid else '❌ (Muted بە ناو)'}")
 
     for k, label in PERM_LABELS.items():
         roles_txt = ", ".join(f"<@&{r}>" for r in c["perm_roles"][k]) or "❌"
